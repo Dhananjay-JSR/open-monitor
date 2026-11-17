@@ -67,6 +67,7 @@ export async function fakeServer(handler) {
     res.end(body)
   })
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
+  server.unref() // a failing test shouldn't leave the process hanging on an open server
 
   return {
     url: `http://127.0.0.1:${server.address().port}`,

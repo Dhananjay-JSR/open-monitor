@@ -5,6 +5,7 @@ import { nextRun } from './schedule.js'
 import * as store from './store.js'
 import { judgeConfigured } from './judge.js'
 import { runSearch } from './search-monitor.js'
+import { runPages } from './page-monitor.js'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 const STALE_AFTER_MS = 15 * 60 * 1000
@@ -13,6 +14,7 @@ const KEEP_RUNS_DAYS = 90
 // target type -> async (ctx, monitor, run). Fills in run.counts, run.changes, run.target_errors.
 export const detectors = {
   search: runSearch,
+  page: runPages,
 }
 
 export function newRun(monitorId, trigger, status) {
