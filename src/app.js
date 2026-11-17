@@ -1,7 +1,7 @@
 // HTTP API. `ctx` is { env, db } and is built by the entrypoint (node.js or worker.js).
 import { iso, now } from './util.js'
 import { newId, newWebhookSecret, sha256, safeEqual } from './crypto.js'
-import { nextRun } from './schedule.js'
+import { scheduleNext } from './schedule.js'
 import * as store from './store.js'
 import { tick, newRun } from './runner.js'
 import { buildEvent, deliver } from './webhooks.js'
@@ -157,7 +157,7 @@ async function createMonitor(ctx, req) {
     created_at: createdAt,
     updated_at: createdAt,
   }
-  monitor.next_run_at = iso(nextRun(monitor.schedule, Date.now()))
+  monitor.next_run_at = iso(scheduleNext(monitor.schedule, Date.now()))
 
   let generatedSecret = null
   if (webhook) {
@@ -185,7 +185,7 @@ async function updateMonitor(ctx, req, monitor) {
   if ('schedule' in body) {
     monitor.schedule = validSchedule(body.schedule)
     if (monitor.status === 'active') {
-      monitor.next_run_at = iso(nextRun(monitor.schedule, Date.now()))
+      monitor.next_run_at = iso(scheduleNext(monitor.schedule, Date.now()))
     }
   }
 
@@ -244,7 +244,7 @@ async function pauseMonitor(ctx, monitor) {
 
 async function resumeMonitor(ctx, monitor) {
   if (monitor.status === 'active') fail(409, 'invalid_state', 'Monitor is not paused')
-  const next = iso(nextRun(monitor.schedule, Date.now()))
+  const next = iso(scheduleNext(monitor.schedule, Date.now()))
   await ctx.db.run(
     `UPDATE monitors SET status = 'active', pause_reason = NULL, fail_streak = 0, next_run_at = ? WHERE id = ?`,
     [next, monitor.id],

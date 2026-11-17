@@ -52,3 +52,22 @@ test('nextRun', () => {
   const cron = { type: 'cron', cron: '0 0 * * *', timezone: 'UTC' }
   assert.equal(iso(nextRun(cron, at('2026-11-17T12:00:00Z'))), '2026-11-18T00:00:00Z')
 })
+
+import { jitterMs, scheduleNext } from '../src/schedule.js'
+
+test('jitter is up to 10% of an interval', () => {
+  const hourly = { type: 'interval', interval: '1h' }
+  assert.equal(jitterMs(hourly, 0, () => 0), 0)
+  assert.equal(jitterMs(hourly, 0, () => 0.999999), 359999) // just under 6 minutes
+  assert.equal(scheduleNext(hourly, 0, () => 0.5), 3600000 + 180000)
+})
+
+test('cron jitter is up to 10 minutes, and at most 10% of the gap between runs', () => {
+  const daily = { type: 'cron', cron: '0 9 * * *', timezone: 'UTC' }
+  assert.equal(jitterMs(daily, at('2026-11-17T00:00:00Z'), () => 0.999999), 599999) // capped at 10 min
+  const everyMinute = { type: 'cron', cron: '* * * * *', timezone: 'UTC' }
+  assert.equal(jitterMs(everyMinute, at('2026-11-17T00:00:00Z'), () => 0.999999), 5999) // 10% of a minute
+  // the jittered time is never before the scheduled slot
+  const next = scheduleNext(daily, at('2026-11-17T00:00:00Z'), () => 0.3)
+  assert.equal(iso(next), '2026-11-17T09:03:00Z')
+})

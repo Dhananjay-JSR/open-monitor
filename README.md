@@ -235,7 +235,6 @@ Same endpoints, objects, validation limits and error types. What differs:
 
 - No credits, quotas, organization policies or rate limits, so `402`, `403` and `429` responses and the `insufficient_credits` and `org_policy` pause reasons never occur.
 - `usage.cost` is 0 unless you set the two `COST_PER_*` rates.
-- Schedules run without jitter.
 - The `freshness` filter is stored and returned, but search providers do not tell published from updated dates. Results dated before the run window are dropped, undated ones are kept.
 - Extra: `trace_id` on runs, `GET /v1/monitors/{id}/deliveries`, `POST /tick`, `GET /health`, and the dashboard.
 

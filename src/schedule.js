@@ -95,3 +95,26 @@ export function nextRun(schedule, fromMs) {
   if (schedule.type === 'interval') return fromMs + parseInterval(schedule.interval)
   return cronNext(schedule.cron, schedule.timezone, fromMs)
 }
+
+const MAX_CRON_JITTER_MS = 10 * 60000
+
+// Random delay added to scheduled starts, like Perplexity: up to 10% of an interval, or up to
+// 10 minutes for cron. Spreads out monitors that share a schedule so they don't all start in
+// the same second. Cron jitter is also capped at 10% of the gap to the following run, so an
+// every-minute cron doesn't get pushed by several minutes.
+export function jitterMs(schedule, fromMs, random = Math.random) {
+  let max
+  if (schedule.type === 'interval') {
+    max = parseInterval(schedule.interval) * 0.1
+  } else {
+    const first = cronNext(schedule.cron, schedule.timezone, fromMs)
+    const gap = cronNext(schedule.cron, schedule.timezone, first) - first
+    max = Math.min(MAX_CRON_JITTER_MS, gap * 0.1)
+  }
+  return Math.floor(random() * max)
+}
+
+// When a monitor should next run: the next slot from its schedule, plus jitter.
+export function scheduleNext(schedule, fromMs, random) {
+  return nextRun(schedule, fromMs) + jitterMs(schedule, fromMs, random)
+}

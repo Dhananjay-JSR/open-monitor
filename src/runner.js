@@ -1,7 +1,7 @@
 // Background work: the scheduler tick and everything that happens during a run.
 import { iso, now, runError } from './util.js'
 import { newId, idAt } from './crypto.js'
-import { nextRun } from './schedule.js'
+import { nextRun, scheduleNext } from './schedule.js'
 import * as store from './store.js'
 import { judgeConfigured } from './judge.js'
 import { runSearch } from './search-monitor.js'
@@ -88,7 +88,7 @@ async function startDueMonitors(ctx) {
     if (!monitor) break
 
     // the unique index guarantees nobody else is running this monitor, so this can't race
-    const next = iso(nextRun(monitor.schedule, Date.now()))
+    const next = iso(scheduleNext(monitor.schedule, Date.now()))
     await ctx.db.run('UPDATE monitors SET next_run_at = ? WHERE id = ?', [next, monitor.id])
 
     run.monitor_id = monitor.id
