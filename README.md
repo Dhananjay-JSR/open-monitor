@@ -242,15 +242,16 @@ Same endpoints, objects, validation limits and error types. What differs:
 
 ## Not tested
 
+Checked against the real services: Tavily, OpenRouter (`openrouter/free` as the judge) and Grafana Cloud (traces, logs and metrics over OTLP/HTTP JSON).
+
 Built and covered by automated tests against fake services, but never run against the real thing:
 
-- OpenRouter and other hosted LLM APIs (Tavily has been checked with a real key)
+- Hosted LLM APIs other than OpenRouter
 - `claude -p`, `codex exec` and `opencode run` as `LLM_COMMAND` (the mechanism is tested with shell commands)
 - Kitesurf, Cloudflare Browser Run and Chrome as `BROWSER_WS_URL` (Lightpanda is tested)
 - `BROWSER_WS_HEADERS`
 - The Docker image and compose file
 - A real Cloudflare deployment (it runs under `wrangler dev`)
-- A real OTLP backend such as Grafana Cloud
 
 ## Development
 
