@@ -244,7 +244,7 @@ Same endpoints, objects, validation limits and error types. What differs:
 
 Built and covered by automated tests against fake services, but never run against the real thing:
 
-- Tavily, OpenRouter and other hosted LLM APIs
+- OpenRouter and other hosted LLM APIs (Tavily has been checked with a real key)
 - `claude -p`, `codex exec` and `opencode run` as `LLM_COMMAND` (the mechanism is tested with shell commands)
 - Kitesurf, Cloudflare Browser Run and Chrome as `BROWSER_WS_URL` (Lightpanda is tested)
 - `BROWSER_WS_HEADERS`

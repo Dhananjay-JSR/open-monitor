@@ -47,6 +47,8 @@ async function tavily(env, target, days) {
       time_range: range,
       include_domains: target.filters.include_domains,
       exclude_domains: target.filters.exclude_domains,
+      // without this Tavily leaves out publish dates, and the window filter can't drop old results
+      include_published_date: true,
     }),
   })
 }

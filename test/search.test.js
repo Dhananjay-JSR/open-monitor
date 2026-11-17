@@ -46,6 +46,7 @@ test('tavily search monitor', async () => {
   assert.equal(sent.json.max_results, 10)
   assert.equal(sent.json.time_range, 'day') // daily schedule
   assert.deepEqual(sent.json.exclude_domains, ['example.net'])
+  assert.equal(sent.json.include_published_date, true)
 
   // second run: both urls were judged already (kept or not), so nothing is new
   const second = await runAndWait(id)
