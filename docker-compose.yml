@@ -1,0 +1,34 @@
+# open-monitor with its own search engine and a lightweight headless browser.
+#   cp .env.example .env   (then fill it in)
+#   docker compose up -d
+services:
+  monitor:
+    build: .
+    ports:
+      - "8787:8787"
+    env_file: .env
+    environment:
+      SEARXNG_URL: http://searxng:8080
+      BROWSER_WS_URL: ws://lightpanda:9222
+    volumes:
+      - data:/data
+    depends_on:
+      - searxng
+      - lightpanda
+    restart: unless-stopped
+
+  # self-hosted metasearch, so search monitors need no API key
+  searxng:
+    image: searxng/searxng:latest
+    volumes:
+      - ./searxng/settings.yml:/etc/searxng/settings.yml:ro
+    restart: unless-stopped
+
+  # renders pages that need javascript. Remove this and BROWSER_WS_URL above if you only
+  # watch static pages.
+  lightpanda:
+    image: lightpanda/browser:nightly
+    restart: unless-stopped
+
+volumes:
+  data:

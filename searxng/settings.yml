@@ -1,0 +1,14 @@
+# Minimal SearXNG config for open-monitor. Everything else uses the defaults.
+use_default_settings: true
+
+server:
+  # change this to any long random string
+  secret_key: "change-me"
+  # the rate limiter is meant for public instances, this one is only reachable inside compose
+  limiter: false
+
+search:
+  # open-monitor talks to the JSON API, which is off by default
+  formats:
+    - html
+    - json
