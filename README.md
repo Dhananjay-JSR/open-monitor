@@ -2,7 +2,7 @@
 
 A self-hosted server that speaks [Perplexity's Monitor API](https://docs.perplexity.ai/docs/monitors/overview). It watches web search results or specific pages on a schedule, asks an LLM whether what it found matters for your goal, and sends the kept changes to a webhook.
 
-Point an existing Monitor API client at your own base URL and it keeps working. You bring the search provider and the LLM. No npm dependencies.
+Point an existing Monitor API client at your own base URL and it keeps working. You bring the search provider and the LLM. The only npm dependencies are the official OpenTelemetry packages, for telemetry.
 
 ```bash
 curl -X POST http://localhost:8787/v1/monitors \
@@ -216,7 +216,7 @@ Logins are server-side sessions that last 12 hours. Five wrong passwords lock th
 
 Every webhook attempt is recorded and available at `GET /v1/monitors/{id}/deliveries`, and in the dashboard log.
 
-Set `OTEL_EXPORTER_OTLP_ENDPOINT` to also export traces, counters and logs over OTLP/HTTP (JSON) to any OpenTelemetry backend:
+Set `OTEL_EXPORTER_OTLP_ENDPOINT` to also export traces, counters and logs to any OpenTelemetry backend. It uses the official OpenTelemetry JavaScript packages, sending OTLP over HTTP:
 
 ```bash
 OTEL_EXPORTER_OTLP_ENDPOINT=<your backend's OTLP/HTTP endpoint>
@@ -226,6 +226,8 @@ OTEL_EXPORTER_OTLP_HEADERS=Authorization=<value your backend gives you, url-enco
 Hosted backends with a free tier (Grafana Cloud, for one) show both values on their OpenTelemetry setup page.
 
 Each run is one trace: the run itself, the search call or page fetches, each judge call, and each webhook delivery attempt. Outgoing webhooks carry a `traceparent` header, so a receiver that uses OpenTelemetry continues the same trace. A run's `trace_id` is in its JSON.
+
+On Cloudflare Workers, Cloudflare's own automatic tracing (requests and bindings) is off by default, so you only get open-monitor's spans. To add Cloudflare's as well, uncomment the `[observability]` block in `wrangler.toml` and create an export destination in the Cloudflare dashboard.
 
 Secrets, tokens, page content and search results are never exported. For webhook URLs only the host is recorded.
 

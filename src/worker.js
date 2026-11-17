@@ -47,11 +47,13 @@ function d1(database) {
   }
 }
 
-// once per isolate
+// once per isolate: the schema check, and telemetry (so counters add up across requests)
 let migrated = null
+let telemetry = null
 
 async function makeContext(env) {
-  const ctx = { env, db: d1(env.DB), telemetry: createTelemetry(env), dashboard }
+  telemetry ??= createTelemetry(env)
+  const ctx = { env, db: d1(env.DB), telemetry, dashboard }
   migrated ??= migrate(ctx.db)
   await migrated
   return ctx

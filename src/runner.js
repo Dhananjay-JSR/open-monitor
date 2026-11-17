@@ -212,9 +212,9 @@ async function finish(ctx, monitor, run, status, error) {
   // events carry the run exactly as GET /runs/{id} returns it
   const view = await store.getRun(ctx.db, run.monitor_id, run.id)
   if (status === 'succeeded' && run.changes.length > 0) {
-    await emit(ctx, monitor, 'monitor.changes.detected', view)
+    await emit(ctx, monitor, 'monitor.changes.detected', view, run.span)
   }
-  await emit(ctx, monitor, 'monitor.run.completed', view)
+  await emit(ctx, monitor, 'monitor.run.completed', view, run.span)
 
   if (sourceFailed && monitor.fail_streak + 1 >= SOURCE_FAILURES_BEFORE_PAUSE) {
     await autoPause(ctx, monitor, 'source_failing', view)

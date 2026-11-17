@@ -1,34 +1,22 @@
-// OpenTelemetry export without the SDK. Spans, counters and log records are buffered in
-// memory and sent as OTLP/HTTP JSON when OTEL_EXPORTER_OTLP_ENDPOINT is set.
-// Works with any OTLP backend (Grafana Cloud, Honeycomb, New Relic, a local collector...).
+// Telemetry on the official OpenTelemetry packages: traces, counters and logs, sent over
+// OTLP/HTTP when OTEL_EXPORTER_OTLP_ENDPOINT is set. Works on Node and on Workers (the
+// exporters send with fetch there).
 //
-// Trace ids are generated even when export is off, so runs and deliveries always carry one.
+// The rest of the code only uses createTelemetry() and the small span object it hands out,
+// so swapping the backend never touches callers. Trace ids are generated even when export
+// is off, so runs and deliveries always carry one.
+import { trace, context, ROOT_CONTEXT, TraceFlags, SeverityNumber, ValueType } from '@opentelemetry/api'
+import { TracerProvider, BatchSpanProcessor } from '@opentelemetry/sdk-trace'
+import { LoggerProvider, BatchLogRecordProcessor } from '@opentelemetry/sdk-logs'
+import { MeterProvider, PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics'
+import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http'
+import { OTLPLogExporter } from '@opentelemetry/exporter-logs-otlp-http'
+import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-http'
+import { resourceFromAttributes } from '@opentelemetry/resources'
 
-const startedAt = Date.now()
+const SEVERITY = { INFO: SeverityNumber.INFO, WARN: SeverityNumber.WARN, ERROR: SeverityNumber.ERROR }
 
-function randomHex(bytes) {
-  const buffer = crypto.getRandomValues(new Uint8Array(bytes))
-  return [...buffer].map((b) => b.toString(16).padStart(2, '0')).join('')
-}
-
-function nanos(ms) {
-  return String(BigInt(Math.round(ms)) * 1_000_000n)
-}
-
-// { a: 1, b: 'x' } -> OTLP attribute list. null/undefined values are dropped.
-function attributes(obj = {}) {
-  const list = []
-  for (const [key, value] of Object.entries(obj)) {
-    if (value === null || value === undefined) continue
-    if (typeof value === 'boolean') list.push({ key, value: { boolValue: value } })
-    else if (Number.isInteger(value)) list.push({ key, value: { intValue: String(value) } })
-    else if (typeof value === 'number') list.push({ key, value: { doubleValue: value } })
-    else list.push({ key, value: { stringValue: String(value) } })
-  }
-  return list
-}
-
-// "key=value,other=value" as used by the standard OTEL_EXPORTER_OTLP_HEADERS variable
+// "key=value,other=value", the format of the standard OTEL_EXPORTER_OTLP_HEADERS variable
 function parseHeaders(raw = '') {
   const headers = {}
   for (const pair of raw.split(',')) {
@@ -38,112 +26,106 @@ function parseHeaders(raw = '') {
   return headers
 }
 
+// OpenTelemetry warns about undefined attribute values, so leave them out
+function clean(attrs = {}) {
+  const out = {}
+  for (const [key, value] of Object.entries(attrs)) {
+    if (value !== null && value !== undefined) out[key] = value
+  }
+  return out
+}
+
+// parent can be a span from startSpan, or { traceId, spanId } read back from the database
+function parentContext(parent) {
+  if (parent?.otelSpan) return trace.setSpan(ROOT_CONTEXT, parent.otelSpan)
+  if (parent?.traceId && parent?.spanId) {
+    return trace.setSpanContext(ROOT_CONTEXT, {
+      traceId: parent.traceId,
+      spanId: parent.spanId,
+      traceFlags: TraceFlags.SAMPLED,
+      isRemote: true,
+    })
+  }
+  return ROOT_CONTEXT
+}
+
 export function createTelemetry(env) {
   const endpoint = env.OTEL_EXPORTER_OTLP_ENDPOINT?.replace(/\/+$/, '')
   const enabled = Boolean(endpoint)
-  const resource = {
-    attributes: attributes({ 'service.name': env.OTEL_SERVICE_NAME ?? 'open-monitor' }),
+  const resource = resourceFromAttributes({ 'service.name': env.OTEL_SERVICE_NAME ?? 'open-monitor' })
+  const headers = parseHeaders(env.OTEL_EXPORTER_OTLP_HEADERS)
+
+  // the tracer provider always exists so spans get real ids; it only exports when enabled
+  const tracerProvider = new TracerProvider({
+    resource,
+    spanProcessors: enabled
+      ? [new BatchSpanProcessor({ exporter: new OTLPTraceExporter({ url: endpoint + '/v1/traces', headers }) })]
+      : [],
+  })
+  const tracer = tracerProvider.getTracer('open-monitor')
+
+  let loggerProvider = null
+  let meterProvider = null
+  let logger = null
+  let meter = null
+  const counters = new Map()
+  if (enabled) {
+    loggerProvider = new LoggerProvider({
+      resource,
+      processors: [new BatchLogRecordProcessor({ exporter: new OTLPLogExporter({ url: endpoint + '/v1/logs', headers }) })],
+    })
+    logger = loggerProvider.getLogger('open-monitor')
+    meterProvider = new MeterProvider({
+      resource,
+      readers: [
+        new PeriodicExportingMetricReader({
+          exporter: new OTLPMetricExporter({ url: endpoint + '/v1/metrics', headers }),
+          exportIntervalMillis: 60_000, // flush() also sends them, at the end of every tick
+        }),
+      ],
+    })
+    meter = meterProvider.getMeter('open-monitor')
   }
-  const scope = { name: 'open-monitor' }
 
-  let spans = []
-  let logs = []
-  const counters = new Map() // "name|attrs json" -> { name, attrs, value }
-  let warned = false
-
-  // parent is { traceId, spanId } or nothing for a new trace
   function startSpan(name, attrs = {}, parent) {
-    const span = {
-      traceId: parent?.traceId ?? randomHex(16),
-      spanId: randomHex(8),
-      parentSpanId: parent?.spanId,
-      name,
-      start: Date.now(),
-      attrs: { ...attrs },
+    const otelSpan = tracer.startSpan(name, { attributes: clean(attrs) }, parentContext(parent))
+    const { traceId, spanId } = otelSpan.spanContext()
+    return {
+      traceId,
+      spanId,
+      otelSpan,
+      end(moreAttrs = {}, error) {
+        otelSpan.setAttributes(clean(moreAttrs))
+        otelSpan.setStatus(error ? { code: 2, message: String(error) } : { code: 1 })
+        otelSpan.end()
+      },
     }
-    span.end = (moreAttrs = {}, error) => {
-      if (!enabled) return
-      spans.push({
-        traceId: span.traceId,
-        spanId: span.spanId,
-        parentSpanId: span.parentSpanId,
-        name,
-        kind: 1,
-        startTimeUnixNano: nanos(span.start),
-        endTimeUnixNano: nanos(Date.now()),
-        attributes: attributes({ ...span.attrs, ...moreAttrs }),
-        status: error ? { code: 2, message: String(error) } : { code: 1 },
-      })
-    }
-    return span
   }
 
   function count(name, attrs = {}, by = 1) {
-    if (!enabled) return
-    const key = name + '|' + JSON.stringify(attrs)
-    const counter = counters.get(key) ?? { name, attrs, value: 0 }
-    counter.value += by
-    counters.set(key, counter)
+    if (!meter) return
+    if (!counters.has(name)) counters.set(name, meter.createCounter(name, { valueType: ValueType.INT }))
+    counters.get(name).add(by, clean(attrs))
   }
 
-  // severity: 'INFO' | 'WARN' | 'ERROR'
-  function log(severity, message, attrs = {}, trace) {
-    if (!enabled) return
-    const numbers = { INFO: 9, WARN: 13, ERROR: 17 }
-    logs.push({
-      timeUnixNano: nanos(Date.now()),
+  // severity: 'INFO' | 'WARN' | 'ERROR'. `span` ties the record to a trace.
+  function log(severity, message, attrs = {}, span) {
+    if (!logger) return
+    logger.emit({
+      severityNumber: SEVERITY[severity] ?? SeverityNumber.INFO,
       severityText: severity,
-      severityNumber: numbers[severity] ?? 9,
-      body: { stringValue: message },
-      attributes: attributes(attrs),
-      traceId: trace?.traceId,
-      spanId: trace?.spanId,
+      body: message,
+      attributes: clean(attrs),
+      context: span ? parentContext(span) : context.active(),
     })
   }
 
-  async function send(path, body) {
-    const res = await fetch(endpoint + path, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', ...parseHeaders(env.OTEL_EXPORTER_OTLP_HEADERS) },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(10_000),
-    })
-    await res.body?.cancel()
-    if (!res.ok) throw new Error(`collector answered ${res.status} on ${path}`)
-  }
-
+  let warned = false
   // Sends whatever is buffered. Telemetry must never break the app, so failures are only logged.
   async function flush() {
     if (!enabled) return
-    const batch = { spans, logs }
-    spans = []
-    logs = []
     try {
-      if (batch.spans.length) {
-        await send('/v1/traces', { resourceSpans: [{ resource, scopeSpans: [{ scope, spans: batch.spans }] }] })
-      }
-      if (batch.logs.length) {
-        await send('/v1/logs', { resourceLogs: [{ resource, scopeLogs: [{ scope, logRecords: batch.logs }] }] })
-      }
-      if (counters.size) {
-        // cumulative sums since the process started
-        const metrics = [...counters.values()].map((c) => ({
-          name: c.name,
-          sum: {
-            aggregationTemporality: 2,
-            isMonotonic: true,
-            dataPoints: [
-              {
-                attributes: attributes(c.attrs),
-                startTimeUnixNano: nanos(startedAt),
-                timeUnixNano: nanos(Date.now()),
-                asInt: String(c.value),
-              },
-            ],
-          },
-        }))
-        await send('/v1/metrics', { resourceMetrics: [{ resource, scopeMetrics: [{ scope, metrics }] }] })
-      }
+      await Promise.all([tracerProvider.forceFlush(), loggerProvider.forceFlush(), meterProvider.forceFlush()])
     } catch (e) {
       if (!warned) console.warn(`telemetry export failed: ${e.message}`)
       warned = true

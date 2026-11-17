@@ -1,7 +1,8 @@
 FROM node:24-slim
 
 WORKDIR /app
-COPY package.json ./
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
 COPY src ./src
 
 # the sqlite file lives on a volume so it survives container restarts

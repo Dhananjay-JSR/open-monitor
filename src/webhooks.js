@@ -25,7 +25,8 @@ export function buildEvent(monitor, type, run) {
 }
 
 // Queue an event if the monitor's webhook is subscribed to it. The tick sends it.
-export async function emit(ctx, monitor, type, run) {
+// `span` is the run's span, when there is one, so the delivery can be traced under it.
+export async function emit(ctx, monitor, type, run, span) {
   if (ctx.hooks?.onEvent) {
     try {
       await ctx.hooks.onEvent(ctx, monitor, type, run)
@@ -36,9 +37,9 @@ export async function emit(ctx, monitor, type, run) {
   if (!monitor.webhook || !monitor.webhook.events.includes(type)) return
   const event = buildEvent(monitor, type, run)
   await ctx.db.run(
-    `INSERT INTO deliveries (id, monitor_id, body, attempt, next_at, run_id, event_type, trace_id)
-     VALUES (?, ?, ?, 0, ?, ?, ?, ?)`,
-    [event.id, monitor.id, JSON.stringify(event), now(), run?.id ?? null, type, run?.trace_id ?? null],
+    `INSERT INTO deliveries (id, monitor_id, body, attempt, next_at, run_id, event_type, trace_id, span_id)
+     VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?)`,
+    [event.id, monitor.id, JSON.stringify(event), now(), run?.id ?? null, type, span?.traceId ?? run?.trace_id ?? null, span?.spanId ?? null],
   )
 }
 
@@ -147,7 +148,7 @@ export async function sendDueDeliveries(ctx) {
 
     const host = hostOf(monitor.webhook.url)
     // same trace as the run that caused the event, when there was one
-    const parent = delivery.trace_id ? { traceId: delivery.trace_id } : undefined
+    const parent = delivery.trace_id && delivery.span_id ? { traceId: delivery.trace_id, spanId: delivery.span_id } : undefined
     const span = ctx.telemetry.startSpan(
       'webhook.delivery',
       { 'monitor.id': monitor.id, 'event.id': delivery.id, 'event.type': delivery.event_type, 'webhook.host': host, 'webhook.attempt': delivery.attempt + 1 },

@@ -128,7 +128,8 @@ export const SCHEMA = [
     next_at TEXT NOT NULL,
     run_id TEXT,
     event_type TEXT,
-    trace_id TEXT
+    trace_id TEXT,
+    span_id TEXT -- the run's span, so delivery spans join the run's trace under it
   )`,
 
   // one row per webhook attempt, kept as a delivery log

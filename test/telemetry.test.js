@@ -89,7 +89,7 @@ test('counters and failure logs are exported', async () => {
   const metrics = exported(collector, '/v1/metrics').at(-1).resourceMetrics[0].scopeMetrics[0].metrics
   const runs = metrics.find((m) => m.name === 'open_monitor.runs')
   assert.equal(runs.sum.isMonotonic, true)
-  assert.equal(runs.sum.dataPoints[0].asInt, '1')
+  assert.equal(Number(runs.sum.dataPoints[0].asInt), 1) // OTLP JSON allows a number or a string here
   assert.deepEqual(attrs(runs.sum.dataPoints[0]), { status: 'failed', trigger: 'manual' })
 
   const logs = exported(collector, '/v1/logs').flatMap((body) => body.resourceLogs[0].scopeLogs[0].logRecords)
