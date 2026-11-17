@@ -199,8 +199,8 @@ function verify(rawBody, headers, secret) {
 
 Also reject timestamps more than five minutes old, and dedupe on `webhook-id`.
 
-- A failed delivery is retried after 5 seconds, 5 minutes, 30 minutes, 2, 5 and 10 hours. Timeouts, network errors, 408, 429 and 5xx are retried. Other 4xx and redirects are not.
-- A delivery that fails for good pauses the monitor with `pause_reason: webhook_failing`. Fix the endpoint, then call `/resume`.
+- A failed delivery is retried after 5 seconds, 5 minutes, 30 minutes, 2, 5 and 10 hours: 7 attempts, about 17.6 hours. Every kind of failure is retried on this schedule, including 4xx answers and redirects (which are not followed).
+- The monitor keeps running while its webhook is failing. Only when an event has failed all 7 attempts is the monitor paused with `pause_reason: webhook_failing`. Fix the endpoint, then call `/resume`. Kept changes are always in the run history, whether or not they were delivered.
 - After you change the secret, the old one keeps signing alongside the new one for 24 hours.
 - Webhook and page URLs on localhost or private addresses are refused unless `ALLOW_PRIVATE_URLS=1`. The check looks at the hostname as written, so a public name that resolves to a private address still gets through.
 

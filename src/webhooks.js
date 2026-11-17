@@ -89,13 +89,6 @@ export async function deliver(ctx, monitor, eventId, body, span) {
   }
 }
 
-function shouldRetry(result) {
-  if (result.status_code) {
-    return result.status_code === 408 || result.status_code === 429 || result.status_code >= 500
-  }
-  return result.error === 'timeout' || result.error === 'network_error'
-}
-
 // The service pausing a monitor on its own (as opposed to the user). Sends monitor.paused.
 export async function autoPause(ctx, monitor, reason, run) {
   const paused = await ctx.db.run(
@@ -164,8 +157,10 @@ export async function sendDueDeliveries(ctx) {
     span.end({ 'http.status_code': result.status_code, 'webhook.delivered': result.delivered }, result.error)
     await recordAttempt(ctx, monitor.id, delivery, host, result, span.traceId)
 
+    // every kind of failure is retried on the same schedule. A receiver being down is its
+    // own problem: the monitor keeps checking pages until the very last attempt has failed.
     const attemptsLeft = delivery.attempt < RETRY_DELAYS_S.length
-    if (!result.delivered && shouldRetry(result) && attemptsLeft) {
+    if (!result.delivered && attemptsLeft) {
       ctx.telemetry.count('open_monitor.deliveries', { outcome: 'retry' })
       continue
     }
@@ -173,8 +168,8 @@ export async function sendDueDeliveries(ctx) {
     await ctx.db.run('DELETE FROM deliveries WHERE id = ?', [delivery.id])
     ctx.telemetry.count('open_monitor.deliveries', { outcome: result.delivered ? 'delivered' : 'gave_up' })
     if (!result.delivered) {
-      // gave up on this one. A dead endpoint pauses the monitor so it gets noticed.
-      ctx.telemetry.log('WARN', 'webhook delivery gave up, pausing monitor', { 'monitor.id': monitor.id, 'event.id': delivery.id, 'webhook.host': host }, span)
+      // all 7 attempts failed (about 17.6 hours): pause so someone notices, resume by hand
+      ctx.telemetry.log('WARN', 'webhook delivery failed 7 times, pausing monitor', { 'monitor.id': monitor.id, 'event.id': delivery.id, 'webhook.host': host }, span)
       await autoPause(ctx, monitor, 'webhook_failing')
     }
   }

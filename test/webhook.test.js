@@ -90,21 +90,47 @@ test('5xx is retried with the same event id', async () => {
   assert.equal((await app.call('GET', `/v1/monitors/${app.id}`)).body.status, 'active')
 })
 
-test('a 4xx is not retried and pauses the monitor', async () => {
+test('a 4xx is retried like any other failure, and only the 7th failure pauses', async () => {
   const app = await setup(() => ({ status: 410 }))
   await app.runAndWait(app.id)
 
-  const monitor = (await app.call('GET', `/v1/monitors/${app.id}`)).body
+  // first failure: the monitor keeps running, the event waits for its retry
+  let monitor = (await app.call('GET', `/v1/monitors/${app.id}`)).body
+  assert.equal(monitor.status, 'active')
+  const [queued] = await app.ctx.db.all('SELECT attempt FROM deliveries')
+  assert.equal(queued.attempt, 1)
+
+  for (let i = 0; i < 5; i++) await flush(app)
+  monitor = (await app.call('GET', `/v1/monitors/${app.id}`)).body
+  assert.equal(monitor.status, 'active') // 6 failures, still running
+
+  await flush(app) // 7th attempt
+  monitor = (await app.call('GET', `/v1/monitors/${app.id}`)).body
   assert.equal(monitor.status, 'paused')
   assert.equal(monitor.pause_reason, 'webhook_failing')
   assert.equal('next_run_at' in monitor, false)
 
+  const detected = app.receiver.requests.filter((r) => r.json.type === 'monitor.changes.detected')
+  assert.equal(detected.length, 7)
   // monitor.paused goes to the same (dead) endpoint, best effort
   await flush(app)
-  const types = app.receiver.requests.map((r) => r.json.type)
-  assert.deepEqual(types, ['monitor.changes.detected', 'monitor.paused'])
-  assert.equal(app.receiver.requests[1].json.data.monitor.pause_reason, 'webhook_failing')
-  assert.equal((await app.ctx.db.all('SELECT * FROM deliveries')).length, 0)
+  assert.ok(app.receiver.requests.some((r) => r.json.type === 'monitor.paused'))
+})
+
+test('an outage shorter than the retries never pauses the monitor', async () => {
+  let calls = 0
+  const app = await setup(() => ({ status: ++calls <= 4 ? 503 : 200 })) // down for 4 attempts
+  await app.runAndWait(app.id)
+  for (let i = 0; i < 4; i++) await flush(app)
+
+  assert.equal(app.receiver.requests.length, 5)
+  assert.equal(app.receiver.requests.at(-1).headers['webhook-id'], app.receiver.requests[0].headers['webhook-id'])
+  assert.equal((await app.ctx.db.all('SELECT * FROM deliveries')).length, 0) // delivered on the 5th try
+  assert.equal((await app.call('GET', `/v1/monitors/${app.id}`)).body.status, 'active')
+
+  // and runs carry on as normal
+  const next = await app.runAndWait(app.id)
+  assert.equal(next.status, 'succeeded')
 })
 
 test('gives up after seven attempts', async () => {
