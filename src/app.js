@@ -5,6 +5,8 @@ import { nextRun } from './schedule.js'
 import * as store from './store.js'
 import { tick, newRun } from './runner.js'
 import { buildEvent, deliver } from './webhooks.js'
+import { dashboardEnabled, sessionUser, login, logout } from './auth.js'
+import { judgeConfigured } from './judge.js'
 import {
   ApiError,
   fail,
@@ -61,11 +63,23 @@ function monitorView(m, secret) {
   })
 }
 
-async function requireApiKey(ctx, req) {
+// API clients send the key as a bearer token. The dashboard has no key, it rides on the
+// login session cookie instead.
+async function authenticate(ctx, req) {
   if (!ctx.env.API_KEY) fail(500, 'internal_error', 'API_KEY is not configured on the server')
-  const header = req.headers.get('authorization') ?? ''
-  const token = header.replace(/^Bearer\s+/i, '')
-  if (!(await safeEqual(token, ctx.env.API_KEY))) fail(401, 'invalid_api_key', 'Invalid API key')
+
+  const header = req.headers.get('authorization')
+  if (header) {
+    const token = header.replace(/^Bearer\s+/i, '')
+    if (!(await safeEqual(token, ctx.env.API_KEY))) fail(401, 'invalid_api_key', 'Invalid API key')
+    return
+  }
+
+  if (!(await sessionUser(ctx, req))) fail(401, 'invalid_api_key', 'Invalid API key')
+  // The cookie is SameSite=Strict already. This is a second check: browsers label every
+  // request with where it came from, and anything not from our own page is refused.
+  const site = req.headers.get('sec-fetch-site')
+  if (site && site !== 'same-origin') fail(403, 'forbidden', 'Cross-site requests are not allowed')
 }
 
 async function readJson(req) {
@@ -250,7 +264,29 @@ async function route(ctx, req, background) {
 
   if (path === '/health') return json(200, { ok: true })
 
-  await requireApiKey(ctx, req)
+  if (path === '' && method === 'GET') {
+    if (!dashboardEnabled(ctx.env) || !ctx.dashboard) fail(404, 'not_found', 'Not found')
+    return new Response(ctx.dashboard, {
+      headers: {
+        'content-type': 'text/html; charset=utf-8',
+        // everything is inline in the one html file, nothing may load from elsewhere
+        'content-security-policy':
+          "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:; font-src data:; connect-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
+        'x-content-type-options': 'nosniff',
+        'referrer-policy': 'no-referrer',
+      },
+    })
+  }
+  if (path === '/auth/login' && method === 'POST') return login(ctx, req)
+  if (path === '/auth/logout' && method === 'POST') return logout(ctx, req)
+  if (path === '/auth/session' && method === 'GET') {
+    const username = await sessionUser(ctx, req)
+    if (!username) fail(401, 'not_logged_in', 'Not logged in')
+    // judge_configured lets the dashboard warn that runs will fail without an LLM
+    return json(200, { username, judge_configured: judgeConfigured(ctx.env) })
+  }
+
+  await authenticate(ctx, req)
 
   // for hosts with no long-running process: point any external cron at this
   if (path === '/tick' && method === 'POST') {

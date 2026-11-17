@@ -137,6 +137,7 @@ export const SCHEMA = [
     ip TEXT NOT NULL,
     failures INTEGER NOT NULL,
     locked_until TEXT,
+    updated_at TEXT NOT NULL,
     PRIMARY KEY (username, ip)
   )`,
 ]

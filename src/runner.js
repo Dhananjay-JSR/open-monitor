@@ -7,6 +7,7 @@ import { judgeConfigured } from './judge.js'
 import { runSearch } from './search-monitor.js'
 import { runPages } from './page-monitor.js'
 import { emit, autoPause, sendDueDeliveries } from './webhooks.js'
+import { pruneAuthTables } from './auth.js'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 const STALE_AFTER_MS = 15 * 60 * 1000
@@ -43,6 +44,7 @@ export async function tick(ctx) {
   await startDueMonitors(ctx)
   await sendDueDeliveries(ctx)
   await deleteOldRuns(ctx)
+  await pruneAuthTables(ctx)
 }
 
 // if the process died mid-run the monitor would stay "busy" forever
