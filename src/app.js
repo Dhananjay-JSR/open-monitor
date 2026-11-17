@@ -96,13 +96,13 @@ async function createMonitor(ctx, req) {
     }
   }
 
-  const webhook = body.webhook == null ? null : validWebhook(body.webhook)
+  const webhook = body.webhook == null ? null : validWebhook(body.webhook, ctx.env)
   const createdAt = now()
   const monitor = {
     id: newId('mon_'),
     name: validString(body.name, 'name', 1, 256),
     goal: body.goal === undefined ? '' : validString(body.goal, 'goal', 0, 2000),
-    targets: validTargets(body.targets),
+    targets: validTargets(body.targets, ctx.env),
     schedule: validSchedule(body.schedule),
     webhook: webhook && { url: webhook.url, events: webhook.events },
     metadata: body.metadata === undefined ? {} : validMetadata(body.metadata),
@@ -145,7 +145,7 @@ async function updateMonitor(ctx, req, monitor) {
   }
 
   if ('targets' in body) {
-    const targets = validTargets(body.targets)
+    const targets = validTargets(body.targets, ctx.env)
     // pages that are no longer watched lose their baseline, the rest keep theirs
     const stillThere = targets.map((t) => t.url)
     removedPages = monitor.targets.filter((t) => t.url && !stillThere.includes(t.url)).map((t) => t.url)
@@ -159,7 +159,7 @@ async function updateMonitor(ctx, req, monitor) {
       monitor.old_secret = null
       monitor.old_secret_until = null
     } else {
-      const webhook = validWebhook(body.webhook)
+      const webhook = validWebhook(body.webhook, ctx.env)
       monitor.webhook = { url: webhook.url, events: webhook.events }
       if (webhook.secret && monitor.secret && webhook.secret !== monitor.secret) {
         // rotation: the old secret keeps signing for 24h

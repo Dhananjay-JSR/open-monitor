@@ -1,5 +1,6 @@
 // Request validation. Limits follow the Perplexity Monitor API reference.
 import { parseInterval, formatInterval, nextRun } from './schedule.js'
+import { isPrivateUrl } from './net.js'
 
 export const EVENT_TYPES = ['monitor.changes.detected', 'monitor.run.completed', 'monitor.paused']
 const DEFAULT_EVENTS = ['monitor.changes.detected', 'monitor.paused']
@@ -44,7 +45,7 @@ export function validString(value, param, min, max) {
   return value
 }
 
-function validUrl(value, param) {
+function validUrl(value, param, env) {
   validString(value, param, 1, 2048)
   let url
   try {
@@ -54,6 +55,9 @@ function validUrl(value, param) {
   }
   if (url.protocol !== 'http:' && url.protocol !== 'https:') invalid(param, 'must be an http(s) URL')
   if (url.username || url.password) invalid(param, 'must not contain credentials')
+  if (isPrivateUrl(value, env)) {
+    invalid(param, 'must be a public host (set ALLOW_PRIVATE_URLS=1 on the server to allow local addresses)')
+  }
   return value
 }
 
@@ -118,16 +122,16 @@ function validSearchTarget(target, param) {
   return result
 }
 
-function validPageTarget(target, param) {
+function validPageTarget(target, param, env) {
   checkFields(target, ['type', 'url', 'judge'], param)
-  const result = { type: 'page', url: validUrl(target.url, `${param}.url`) }
+  const result = { type: 'page', url: validUrl(target.url, `${param}.url`, env) }
   const judge = validJudge(target.judge, `${param}.judge`)
   if (judge) result.judge = judge
   return result
 }
 
 // one search target, or 1-10 page targets. Never mixed.
-export function validTargets(value) {
+export function validTargets(value, env) {
   if (!Array.isArray(value) || value.length < 1 || value.length > 10) {
     invalid('targets', 'must be an array of 1 to 10 targets')
   }
@@ -135,7 +139,7 @@ export function validTargets(value) {
     const param = `targets[${i}]`
     if (!isObject(target)) invalid(param, 'must be an object')
     if (target.type === 'search') return validSearchTarget(target, param)
-    if (target.type === 'page') return validPageTarget(target, param)
+    if (target.type === 'page') return validPageTarget(target, param, env)
     invalid(`${param}.type`, 'must be "search" or "page"')
   })
 
@@ -181,7 +185,7 @@ export function validSchedule(value) {
 }
 
 // returns { url, events, secret } where secret is undefined unless the caller sent one
-export function validWebhook(value) {
+export function validWebhook(value, env) {
   checkFields(value, ['url', 'events', 'secret'], 'webhook')
 
   const events = value.events ?? []
@@ -197,7 +201,7 @@ export function validWebhook(value) {
   }
 
   return {
-    url: validUrl(value.url, 'webhook.url'),
+    url: validUrl(value.url, 'webhook.url', env),
     events: events.length ? [...new Set(events)] : DEFAULT_EVENTS,
     secret: value.secret,
   }

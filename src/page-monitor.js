@@ -5,6 +5,7 @@ import { sha256 } from './crypto.js'
 import { htmlToText, unifiedDiff } from './text.js'
 import { judge } from './judge.js'
 import { renderPage } from './cdp.js'
+import { isPrivateUrl } from './net.js'
 
 const USER_AGENT = 'Mozilla/5.0 (compatible; open-monitor/0.1)'
 const MAX_REDIRECTS = 5
@@ -44,6 +45,9 @@ async function fetchHtml(env, url) {
   // redirects are followed by hand so every hop can be checked
   let current = url
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+    if (isPrivateUrl(current, env)) {
+      throw pageError('blocked', 'The page is on, or redirects to, a private address')
+    }
     const res = await fetch(current, {
       redirect: 'manual',
       headers: { 'user-agent': USER_AGENT },

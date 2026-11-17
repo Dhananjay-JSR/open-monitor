@@ -3,6 +3,7 @@
 import { iso, now } from './util.js'
 import { newId, signWebhook } from './crypto.js'
 import { getMonitor } from './store.js'
+import { isPrivateUrl } from './net.js'
 
 // delay before each retry: 5s, 5m, 30m, 2h, 5h, 10h. Seven attempts in total.
 const RETRY_DELAYS_S = [5, 300, 1800, 7200, 18000, 36000]
@@ -36,6 +37,11 @@ export async function emit(ctx, monitor, type, run) {
 export async function deliver(ctx, monitor, eventId, body) {
   const started = Date.now()
   const timestamp = String(Math.floor(started / 1000))
+
+  // checked again at send time in case the url was saved while private urls were allowed
+  if (isPrivateUrl(monitor.webhook.url, ctx.env)) {
+    return { delivered: false, duration_ms: 0, error: 'blocked_address' }
+  }
 
   // during a rotation the old secret signs as well, receivers accept either
   const secrets = [monitor.secret]

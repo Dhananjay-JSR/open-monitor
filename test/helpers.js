@@ -10,7 +10,8 @@ export const KEEPWORD_JUDGE = `grep -q KEEP && echo '{"score": 0.9}' || echo '{"
 // app on an in-memory db, plus a `call` helper that goes through the real request handler
 export async function makeApp(env = {}) {
   const ctx = {
-    env: { API_KEY: 'test-key', LLM_COMMAND: KEEPWORD_JUDGE, ...env },
+    // tests talk to servers on 127.0.0.1, which is blocked by default
+    env: { API_KEY: 'test-key', LLM_COMMAND: KEEPWORD_JUDGE, ALLOW_PRIVATE_URLS: '1', ...env },
     db: openDb(':memory:'),
     exec,
   }
