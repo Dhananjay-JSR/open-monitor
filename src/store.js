@@ -117,7 +117,7 @@ async function loadMonitors(db, rows) {
       secret: row.webhook_secret,
       old_secret: row.webhook_old_secret,
       old_secret_until: row.webhook_old_secret_until,
-      window_to: row.window_to,
+      covered_till: row.covered_till,
       fail_streak: row.fail_streak,
       version: row.version,
       idem_hash: row.idem_hash,

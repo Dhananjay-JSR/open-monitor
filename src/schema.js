@@ -16,7 +16,7 @@ export const SCHEMA = [
     webhook_secret TEXT,
     webhook_old_secret TEXT,
     webhook_old_secret_until TEXT,
-    window_to TEXT,
+    covered_till TEXT, -- results are covered up to here; the next run's window starts here
     fail_streak INTEGER NOT NULL DEFAULT 0,
     version INTEGER NOT NULL DEFAULT 0,
     idem_key TEXT UNIQUE,

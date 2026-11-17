@@ -108,10 +108,10 @@ async function deleteOldRuns(ctx) {
   ])
 }
 
-// The window is (from, to]. The first one reaches back one schedule period before the
-// monitor was created (max 7 days), later ones start where the last good run ended.
+// The window is (from, to]: from where the monitor is covered till, to when this run starts.
+// The first one reaches back one schedule period before the monitor was created (max 7 days).
 function runWindow(monitor, startedMs) {
-  if (monitor.window_to) return { from: monitor.window_to, to: iso(startedMs) }
+  if (monitor.covered_till) return { from: monitor.covered_till, to: iso(startedMs) }
   const first = nextRun(monitor.schedule, startedMs)
   const period = nextRun(monitor.schedule, first) - first
   const lookback = Math.min(period, 7 * DAY_MS)
@@ -197,14 +197,15 @@ async function finish(ctx, monitor, run, status, error) {
   )
 
   const sourceFailed = error && ['detect_failed', 'source_failed'].includes(error.code)
-  const windowTo = status === 'succeeded' && run.window ? run.window.to : null
+  // only a successful run moves coverage forward, so a failed run leaves no gap
+  const coveredTill = status === 'succeeded' && run.window ? run.window.to : null
   // the run row is no longer queued or running, so the monitor is free again
   await ctx.db.run(
     `UPDATE monitors SET
-       window_to = COALESCE(?, window_to),
+       covered_till = COALESCE(?, covered_till),
        fail_streak = ${sourceFailed ? 'fail_streak + 1' : '0'}
      WHERE id = ?`,
-    [windowTo, run.monitor_id],
+    [coveredTill, run.monitor_id],
   )
   if (!monitor) return
 
