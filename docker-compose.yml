@@ -28,6 +28,11 @@ services:
   # watch static pages.
   lightpanda:
     image: lightpanda/browser:nightly
+    # Lightpanda only accepts connections addressed to its own name, so tell it the name
+    # the monitor container uses to reach it
+    command: ["/bin/lightpanda", "serve", "--host", "0.0.0.0", "--port", "9222", "--advertise-host", "lightpanda"]
+    environment:
+      LIGHTPANDA_DISABLE_TELEMETRY: "true" # Lightpanda sends usage telemetry by default
     restart: unless-stopped
 
 volumes:

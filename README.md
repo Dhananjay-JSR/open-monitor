@@ -242,7 +242,7 @@ Same endpoints, objects, validation limits and error types. What differs:
 
 ## Not tested
 
-Checked against the real services: Tavily, OpenRouter (`openrouter/free` as the judge) and Grafana Cloud (traces, logs and metrics over OTLP/HTTP JSON).
+Checked against the real services: Tavily, OpenRouter (`openrouter/free` as the judge), Grafana Cloud (traces, logs and metrics over OTLP/HTTP JSON), and the Docker compose stack (SearXNG for search, Lightpanda for page rendering).
 
 Built and covered by automated tests against fake services, but never run against the real thing:
 
@@ -250,7 +250,6 @@ Built and covered by automated tests against fake services, but never run agains
 - `claude -p`, `codex exec` and `opencode run` as `LLM_COMMAND` (the mechanism is tested with shell commands)
 - Kitesurf, Cloudflare Browser Run and Chrome as `BROWSER_WS_URL` (Lightpanda is tested)
 - `BROWSER_WS_HEADERS`
-- The Docker image and compose file
 - A real Cloudflare deployment (it runs under `wrangler dev`)
 
 ## Development
