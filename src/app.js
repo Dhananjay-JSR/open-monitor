@@ -4,6 +4,7 @@ import { newId, newWebhookSecret, sha256, safeEqual } from './crypto.js'
 import { nextRun } from './schedule.js'
 import * as store from './store.js'
 import { tick, newRun } from './runner.js'
+import { buildEvent, deliver } from './webhooks.js'
 import {
   ApiError,
   fail,
@@ -234,6 +235,14 @@ async function runNow(ctx, monitor, background) {
   return json(202, queued)
 }
 
+// sends a signed monitor.webhook.test event right away and reports what the receiver said
+async function testWebhook(ctx, monitor) {
+  if (!monitor.webhook) fail(409, 'invalid_state', 'Monitor has no webhook')
+  const event = buildEvent(monitor, 'monitor.webhook.test')
+  const result = await deliver(ctx, monitor, event.id, JSON.stringify(event))
+  return json(200, { object: 'monitor.webhook_test', event_id: event.id, ...result })
+}
+
 async function route(ctx, req, background) {
   const url = new URL(req.url)
   const path = url.pathname.replace(/\/+$/, '')
@@ -283,6 +292,7 @@ async function route(ctx, req, background) {
     if (action === '/pause') return pauseMonitor(ctx, monitor)
     if (action === '/resume') return resumeMonitor(ctx, monitor)
     if (action === '/run') return runNow(ctx, monitor, background)
+    if (action === '/webhook/test') return testWebhook(ctx, monitor)
   }
 
   if (method === 'GET' && action === '/runs') {

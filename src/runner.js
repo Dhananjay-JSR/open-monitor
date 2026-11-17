@@ -6,10 +6,12 @@ import * as store from './store.js'
 import { judgeConfigured } from './judge.js'
 import { runSearch } from './search-monitor.js'
 import { runPages } from './page-monitor.js'
+import { emit, autoPause, sendDueDeliveries } from './webhooks.js'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 const STALE_AFTER_MS = 15 * 60 * 1000
 const KEEP_RUNS_DAYS = 90
+const SOURCE_FAILURES_BEFORE_PAUSE = 5
 
 // target type -> async (ctx, monitor, run). Fills in run.counts, run.changes, run.target_errors.
 export const detectors = {
@@ -39,6 +41,7 @@ export async function tick(ctx) {
   await failStaleRuns(ctx)
   await startQueuedRuns(ctx)
   await startDueMonitors(ctx)
+  await sendDueDeliveries(ctx)
   await deleteOldRuns(ctx)
 }
 
@@ -178,4 +181,16 @@ async function finish(ctx, monitor, run, status, error) {
      WHERE id = ? AND current_run_id = ?`,
     [run.id, windowTo, run.monitor_id, run.id],
   )
+  if (!monitor) return
+
+  // events carry the run exactly as GET /runs/{id} returns it
+  const view = await store.getRun(ctx.db, run.monitor_id, run.id)
+  if (status === 'succeeded' && run.changes.length > 0) {
+    await emit(ctx, monitor, 'monitor.changes.detected', view)
+  }
+  await emit(ctx, monitor, 'monitor.run.completed', view)
+
+  if (sourceFailed && monitor.fail_streak + 1 >= SOURCE_FAILURES_BEFORE_PAUSE) {
+    await autoPause(ctx, monitor, 'source_failing', view)
+  }
 }
