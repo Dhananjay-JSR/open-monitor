@@ -176,6 +176,17 @@ function trace(monitor, runs) {
 
 // ---- monitor detail and actions ----
 
+// The monitor's newest delivery attempt, if it failed. The delivery log is newest first.
+function failingDelivery(monitor) {
+  const latest = (state.deliveries[monitor.id] ?? [])[0]
+  return latest && !latest.delivered ? latest : null
+}
+
+function failureText(attempt) {
+  const why = attempt.status_code ? `answered ${attempt.status_code}` : attempt.error
+  return `last delivery failed (${why}) at ${clock(attempt.at)}, attempt ${attempt.attempt} of 7. The monitor keeps running and pauses only if all 7 fail.`
+}
+
 function detail(monitor) {
   const first = monitor.targets[0]
   const facts = h('dl', { class: 'facts' })
@@ -187,6 +198,8 @@ function detail(monitor) {
   fact('Next run', dateTime(monitor.next_run_at), true)
   if (monitor.pause_reason) fact('Paused because', monitor.pause_reason)
   if (monitor.webhook) fact('Webhook', monitor.webhook.url, true)
+  const failing = failingDelivery(monitor)
+  if (failing) fact('Webhook problem', failureText(failing))
   fact('ID', monitor.id, true)
 
   const path = `/v1/monitors/${monitor.id}`
@@ -253,7 +266,10 @@ function lanes() {
   for (const monitor of state.monitors) {
     const open = state.selected === monitor.id
     const meta = `${targetText(monitor)} · ${scheduleText(monitor.schedule)}`
-    const name = h('span', {}, h('span', { class: 'lane-name', text: monitor.name }), monitor.status === 'paused' && [' ', h('span', { class: 'tag', 'data-status': 'paused', text: 'paused' })], h('br'), h('span', { class: 'lane-meta', text: meta }))
+    const tags = []
+    if (monitor.status === 'paused') tags.push(' ', h('span', { class: 'tag', 'data-status': 'paused', text: 'paused' }))
+    if (failingDelivery(monitor)) tags.push(' ', h('span', { class: 'tag', 'data-status': 'warning', text: 'webhook failing' }))
+    const name = h('span', {}, h('span', { class: 'lane-name', text: monitor.name }), tags, h('br'), h('span', { class: 'lane-meta', text: meta }))
     const button = h(
       'button',
       {

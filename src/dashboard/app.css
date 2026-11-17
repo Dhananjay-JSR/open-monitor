@@ -319,6 +319,11 @@ textarea.input {
 .tag[data-status='failed'] {
   color: var(--color-danger);
 }
+/* a problem that needs attention but hasn't stopped anything yet */
+.tag[data-status='warning'] {
+  color: var(--color-signal);
+  background: color-mix(in oklch, var(--color-signal) 14%, transparent);
+}
 
 /* ---------- lanes: one monitor per row, its runs drawn on a shared time axis ---------- */
 
