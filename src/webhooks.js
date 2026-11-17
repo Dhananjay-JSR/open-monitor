@@ -26,6 +26,13 @@ export function buildEvent(monitor, type, run) {
 
 // Queue an event if the monitor's webhook is subscribed to it. The tick sends it.
 export async function emit(ctx, monitor, type, run) {
+  if (ctx.hooks?.onEvent) {
+    try {
+      await ctx.hooks.onEvent(ctx, monitor, type, run)
+    } catch (e) {
+      console.error('onEvent hook failed:', e) // an add-on must not be able to break a run
+    }
+  }
   if (!monitor.webhook || !monitor.webhook.events.includes(type)) return
   const event = buildEvent(monitor, type, run)
   await ctx.db.run(

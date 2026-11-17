@@ -63,6 +63,18 @@ function monitorView(m, secret) {
   })
 }
 
+// Add-ons can wrap the server and plug into three places through ctx.hooks (all optional):
+//
+//   identify(ctx, req)             who is this, for requests the core itself could not
+//                                  authenticate. Returns an identity or null.
+//   routes(ctx, req)               extra endpoints. Returns a Response, or null to pass.
+//   onEvent(ctx, monitor, type, run)  called for every monitor event, next to the webhook.
+//
+// An identity is { role, allow(method, action, monitor), view?(monitor), afterRun?(monitor) }.
+// `allow` says whether this caller may do the request, `view` can trim what they see of a
+// monitor, and `afterRun` is told when a manual run they asked for was actually queued.
+const OWNER = { role: 'owner' }
+
 // API clients send the key as a bearer token. The dashboard has no key, it rides on the
 // login session cookie instead.
 async function authenticate(ctx, req) {
@@ -71,15 +83,34 @@ async function authenticate(ctx, req) {
   const header = req.headers.get('authorization')
   if (header) {
     const token = header.replace(/^Bearer\s+/i, '')
-    if (!(await safeEqual(token, ctx.env.API_KEY))) fail(401, 'invalid_api_key', 'Invalid API key')
-    return
+    if (await safeEqual(token, ctx.env.API_KEY)) return OWNER
+  } else if (await sessionUser(ctx, req)) {
+    checkSameSite(req)
+    return OWNER
   }
 
-  if (!(await sessionUser(ctx, req))) fail(401, 'invalid_api_key', 'Invalid API key')
-  // The cookie is SameSite=Strict already. This is a second check: browsers label every
-  // request with where it came from, and anything not from our own page is refused.
+  const identity = await ctx.hooks?.identify?.(ctx, req)
+  if (!identity) fail(401, 'invalid_api_key', 'Invalid API key')
+  return identity
+}
+
+// The session cookie is SameSite=Strict already. This is a second check: browsers label
+// every request with where it came from, and anything not from our own page is refused.
+export function checkSameSite(req) {
   const site = req.headers.get('sec-fetch-site')
   if (site && site !== 'same-origin') fail(403, 'forbidden', 'Cross-site requests are not allowed')
+}
+
+async function requireAllowed(identity, method, action, monitor) {
+  if (identity.role === 'owner') return
+  if (!(await identity.allow(method, action, monitor))) {
+    fail(403, 'forbidden', 'This account is not allowed to do that')
+  }
+}
+
+function present(identity, monitor, secret) {
+  const view = monitorView(monitor, secret)
+  return identity.view ? identity.view(view) : view
 }
 
 async function readJson(req) {
@@ -266,7 +297,9 @@ async function route(ctx, req, background) {
 
   if (path === '' && method === 'GET') {
     if (!dashboardEnabled(ctx.env) || !ctx.dashboard) fail(404, 'not_found', 'Not found')
-    return new Response(ctx.dashboard, {
+    // an add-on can append its own markup and script to the page
+    const page = ctx.dashboardExtra ? ctx.dashboard.replace('</body>', ctx.dashboardExtra + '</body>') : ctx.dashboard
+    return new Response(page, {
       headers: {
         'content-type': 'text/html; charset=utf-8',
         // everything is inline in the one html file, nothing may load from elsewhere
@@ -286,22 +319,31 @@ async function route(ctx, req, background) {
     return json(200, { username, judge_configured: judgeConfigured(ctx.env) })
   }
 
-  await authenticate(ctx, req)
+  // add-on endpoints get first refusal
+  const extra = await ctx.hooks?.routes?.(ctx, req)
+  if (extra) return extra
+
+  const identity = await authenticate(ctx, req)
 
   // for hosts with no long-running process: point any external cron at this
   if (path === '/tick' && method === 'POST') {
+    await requireAllowed(identity, 'POST', '/tick')
     await tick(ctx)
     return json(200, { ok: true })
   }
 
   if (path === '/v1/monitors') {
-    if (method === 'POST') return createMonitor(ctx, req)
+    if (method === 'POST') {
+      await requireAllowed(identity, 'POST', '/monitors')
+      return createMonitor(ctx, req)
+    }
     if (method === 'GET') {
+      await requireAllowed(identity, 'GET', '/monitors')
       const limit = validLimit(url.searchParams.get('limit'))
       const page = await store.listMonitors(ctx.db, url.searchParams.get('after'), limit)
       return json(200, {
         object: 'list',
-        data: page.data.map((m) => monitorView(m)),
+        data: page.data.map((m) => present(identity, m)),
         has_more: page.has_more,
       })
     }
@@ -314,9 +356,10 @@ async function route(ctx, req, background) {
 
   const monitor = await store.getMonitor(ctx.db, id)
   if (!monitor) fail(404, 'not_found', 'Monitor not found')
+  await requireAllowed(identity, method, action, monitor)
 
   if (action === '') {
-    if (method === 'GET') return json(200, monitorView(monitor))
+    if (method === 'GET') return json(200, present(identity, monitor))
     if (method === 'PATCH') return updateMonitor(ctx, req, monitor)
     if (method === 'DELETE') {
       await store.deleteMonitor(ctx.db, id)
@@ -327,7 +370,11 @@ async function route(ctx, req, background) {
   if (method === 'POST') {
     if (action === '/pause') return pauseMonitor(ctx, monitor)
     if (action === '/resume') return resumeMonitor(ctx, monitor)
-    if (action === '/run') return runNow(ctx, monitor, background)
+    if (action === '/run') {
+      const res = await runNow(ctx, monitor, background)
+      await identity.afterRun?.(monitor)
+      return res
+    }
     if (action === '/webhook/test') return testWebhook(ctx, monitor)
   }
 
