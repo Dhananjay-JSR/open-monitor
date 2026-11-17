@@ -298,7 +298,8 @@ async function route(ctx, req, background) {
   if (path === '' && method === 'GET') {
     if (!dashboardEnabled(ctx.env) || !ctx.dashboard) fail(404, 'not_found', 'Not found')
     // an add-on can append its own markup and script to the page
-    const page = ctx.dashboardExtra ? ctx.dashboard.replace('</body>', ctx.dashboardExtra + '</body>') : ctx.dashboard
+    // (a function as the replacement, so "$" sequences in the add-on's script are left alone)
+    const page = ctx.dashboardExtra ? ctx.dashboard.replace('</body>', () => ctx.dashboardExtra + '</body>') : ctx.dashboard
     return new Response(page, {
       headers: {
         'content-type': 'text/html; charset=utf-8',

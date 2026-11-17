@@ -87,7 +87,8 @@ test('add-on routes and events', async () => {
 test('dashboardExtra is appended to the page', async () => {
   const app = await makeApp({ DASHBOARD_USER: 'a', DASHBOARD_PASSWORD: 'b', SESSION_SECRET: 'c' })
   app.ctx.dashboard = '<html><body><main></main></body></html>'
-  app.ctx.dashboardExtra = '<script>window.addon = true</script>'
+  // "$&" would be expanded by a plain string replace
+  app.ctx.dashboardExtra = "<script>window.addon = '$&'</script>"
   const page = await app.call('GET', '/', undefined, { authorization: '' })
-  assert.equal(page.body, '<html><body><main></main><script>window.addon = true</script></body></html>')
+  assert.equal(page.body, "<html><body><main></main><script>window.addon = '$&'</script></body></html>")
 })
