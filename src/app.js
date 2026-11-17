@@ -295,6 +295,10 @@ async function route(ctx, req, background) {
 
   if (path === '/health') return json(200, { ok: true })
 
+  // add-on endpoints get first refusal, including over the /auth routes below
+  const extra = await ctx.hooks?.routes?.(ctx, req)
+  if (extra) return extra
+
   if (path === '' && method === 'GET') {
     if (!dashboardEnabled(ctx.env) || !ctx.dashboard) fail(404, 'not_found', 'Not found')
     // an add-on can append its own markup and script to the page
@@ -319,10 +323,6 @@ async function route(ctx, req, background) {
     // judge_configured lets the dashboard warn that runs will fail without an LLM
     return json(200, { username, judge_configured: judgeConfigured(ctx.env) })
   }
-
-  // add-on endpoints get first refusal
-  const extra = await ctx.hooks?.routes?.(ctx, req)
-  if (extra) return extra
 
   const identity = await authenticate(ctx, req)
 
