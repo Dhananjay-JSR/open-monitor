@@ -1,5 +1,6 @@
 // Node entrypoint: http server + a timer that drives the scheduler.
 import { createServer } from 'node:http'
+import { readFileSync } from 'node:fs'
 import { openDb } from './db-node.js'
 import { exec } from './exec.js'
 import { migrate } from './store.js'
@@ -7,6 +8,7 @@ import { handle } from './app.js'
 import { tick } from './runner.js'
 import { judgeConfigured } from './judge.js'
 import { createTelemetry } from './telemetry.js'
+import { assembleDashboard } from './dashboard/assemble.js'
 
 const env = process.env
 const port = Number(env.PORT ?? 8787)
@@ -22,7 +24,25 @@ if (!judgeConfigured(env)) {
   )
 }
 
-const ctx = { env, db: openDb(env.DB_PATH ?? 'monitor.db'), exec, telemetry: createTelemetry(env) }
+// the dashboard is one html document with its css, script and font inlined
+function loadDashboard() {
+  const dir = new URL('./dashboard/', import.meta.url)
+  const read = (name) => readFileSync(new URL(name, dir), 'utf8')
+  return assembleDashboard({
+    html: read('index.html'),
+    styles: { 'tokens.css': read('tokens.css'), 'app.css': read('app.css') },
+    script: read('app.js'),
+    fonts: { 'geist-variable.woff2': readFileSync(new URL('fonts/geist-variable.woff2', dir)).toString('base64') },
+  })
+}
+
+const ctx = {
+  env,
+  db: openDb(env.DB_PATH ?? 'monitor.db'),
+  exec,
+  telemetry: createTelemetry(env),
+  dashboard: loadDashboard(),
+}
 await migrate(ctx.db)
 
 function background(promise) {

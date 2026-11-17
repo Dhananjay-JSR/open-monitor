@@ -17,3 +17,11 @@ export function inlineStyles(html, styles, fonts = {}) {
     return `<style>\n${inlineFonts(styles[name], fonts)}\n</style>`
   })
 }
+
+// Builds the page the server sends for GET /.
+// parts: { html, styles: { 'tokens.css': ..., 'app.css': ... }, script, fonts }
+export function assembleDashboard(parts) {
+  const html = inlineStyles(parts.html, parts.styles, parts.fonts)
+  // function replacement, so "$&" and friends inside the script are not treated as patterns
+  return html.replace('<script src="app.js"></script>', () => `<script>\n${parts.script}\n</script>`)
+}
