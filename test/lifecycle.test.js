@@ -173,3 +173,69 @@ test('tick fails runs that have been stuck for too long', async () => {
   assert.equal(run.error.code, 'timed_out')
   assert.equal('current_run_id' in (await call('GET', `/v1/monitors/${id}`)).body, false)
 })
+
+test('a monitor whose last run is still going runs late, not skipped', async () => {
+  const { call, ctx } = await makeApp()
+  const restore = stubDetector(async () => {})
+  const id = await createMonitor(call)
+
+  // an earlier run is still going when the monitor comes due
+  await ctx.db.run(
+    `INSERT INTO runs (id, monitor_id, trigger_kind, status, created_at, started_at)
+     VALUES ('run_busy', ?, 'manual', 'running', '2026-11-17T00:00:00Z', ?)`,
+    [id, new Date().toISOString()],
+  )
+  await ctx.db.run(`UPDATE monitors SET current_run_id = 'run_busy', next_run_at = '2026-01-01T00:00:00Z' WHERE id = ?`, [id])
+
+  await call('POST', '/tick')
+  let monitor = (await call('GET', `/v1/monitors/${id}`)).body
+  assert.equal((await call('GET', `/v1/monitors/${id}/runs`)).body.data.length, 1) // only the busy one
+  assert.equal(monitor.next_run_at, '2026-01-01T00:00:00Z') // still due, the slot was not thrown away
+
+  // the busy run ends: the very next tick runs the waiting slot
+  await ctx.db.run(`UPDATE runs SET status = 'succeeded' WHERE id = 'run_busy'`)
+  await ctx.db.run(`UPDATE monitors SET current_run_id = NULL WHERE id = ?`, [id])
+  await call('POST', '/tick')
+  const runs = (await call('GET', `/v1/monitors/${id}/runs`)).body.data
+  assert.equal(runs.length, 2)
+  assert.ok(runs.some((r) => r.trigger === 'schedule' && r.status === 'succeeded'))
+  monitor = (await call('GET', `/v1/monitors/${id}`)).body
+  assert.ok(monitor.next_run_at > new Date().toISOString())
+  restore()
+})
+
+test('two ticks at once share the due monitors and never run one twice', async () => {
+  const { call, ctx } = await makeApp()
+  const restore = stubDetector(async () => new Promise((resolve) => setTimeout(resolve, 50)))
+  const ids = []
+  for (const name of ['a', 'b', 'c']) ids.push(await createMonitor(call, { name }))
+  await ctx.db.run(`UPDATE monitors SET next_run_at = '2026-01-01T00:00:00Z'`)
+
+  await Promise.all([call('POST', '/tick'), call('POST', '/tick')])
+
+  for (const id of ids) {
+    const runs = (await call('GET', `/v1/monitors/${id}/runs`)).body.data
+    assert.equal(runs.length, 1, id)
+    assert.equal(runs[0].status, 'succeeded')
+  }
+  restore()
+})
+
+test('a monitor that comes due while a tick is busy is run by the same tick', async () => {
+  const { call, ctx } = await makeApp()
+  const first = await createMonitor(call, { name: 'first' })
+  const second = await createMonitor(call, { name: 'second' })
+  await ctx.db.run(`UPDATE monitors SET next_run_at = '2026-01-01T00:00:00Z' WHERE id = ?`, [first])
+
+  // while the first monitor runs, the second one becomes due
+  const restore = stubDetector(async (_ctx, monitor) => {
+    if (monitor.id === first) {
+      await ctx.db.run(`UPDATE monitors SET next_run_at = '2026-01-01T00:00:00Z' WHERE id = ?`, [second])
+    }
+  })
+  await call('POST', '/tick')
+
+  assert.equal((await call('GET', `/v1/monitors/${first}/runs`)).body.data.length, 1)
+  assert.equal((await call('GET', `/v1/monitors/${second}/runs`)).body.data.length, 1)
+  restore()
+})

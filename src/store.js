@@ -131,12 +131,23 @@ export async function listMonitors(db, after, limit) {
   }
 }
 
-export async function dueMonitors(db, at) {
+// Takes the oldest monitor that is due and not already running, and marks it as running,
+// in one statement so two ticks can never take the same one. Returns the monitor or undefined.
+export async function claimNextDue(db, runId, at) {
   const rows = await db.all(
-    `SELECT * FROM monitors WHERE status = 'active' AND next_run_at <= ? ORDER BY next_run_at LIMIT 100`,
-    [at],
+    `UPDATE monitors SET current_run_id = ?
+     WHERE id = (
+       SELECT id FROM monitors
+       WHERE status = 'active' AND next_run_at <= ? AND current_run_id IS NULL
+       ORDER BY next_run_at
+       LIMIT 1
+     )
+     AND current_run_id IS NULL
+     RETURNING id`,
+    [runId, at],
   )
-  return loadMonitors(db, rows)
+  if (rows.length === 0) return undefined
+  return getMonitor(db, rows[0].id)
 }
 
 function scheduleColumns(schedule) {

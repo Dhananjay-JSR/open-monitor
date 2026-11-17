@@ -77,25 +77,25 @@ async function startQueuedRuns(ctx) {
   }
 }
 
+// Takes one due monitor at a time and runs it, until none is left. A monitor whose previous
+// run is still going isn't taken; it stays due and runs as soon as that run ends.
+// TODO: runs in one tick go one after another. Fine for a handful of monitors and easy
+// on LLM rate limits, but will need a small pool if someone has hundreds.
 async function startDueMonitors(ctx) {
-  const due = await store.dueMonitors(ctx.db, now())
-  // TODO: runs are executed one after another. Fine for a handful of monitors and easy
-  // on LLM rate limits, but will need a small pool if someone has hundreds.
-  for (const monitor of due) {
+  while (true) {
+    const run = newRun(null, 'schedule', 'running')
+    const monitor = await store.claimNextDue(ctx.db, run.id, now())
+    if (!monitor) break
+
+    // we own the monitor now, so nobody else is racing us for next_run_at
     const next = iso(nextRun(monitor.schedule, Date.now()))
-    const moved = await ctx.db.run(
-      'UPDATE monitors SET next_run_at = ? WHERE id = ? AND next_run_at = ?',
-      [next, monitor.id, monitor.next_run_at],
-    )
-    if (moved.changes === 0) continue // another tick got it
+    await ctx.db.run('UPDATE monitors SET next_run_at = ? WHERE id = ? AND current_run_id = ?', [
+      next,
+      monitor.id,
+      run.id,
+    ])
 
-    const run = newRun(monitor.id, 'schedule', 'running')
-    const claimed = await ctx.db.run(
-      'UPDATE monitors SET current_run_id = ? WHERE id = ? AND current_run_id IS NULL',
-      [run.id, monitor.id],
-    )
-    if (claimed.changes === 0) continue // previous run still going, skip this slot
-
+    run.monitor_id = monitor.id
     await store.insertRun(ctx.db, run)
     await execute(ctx, run)
   }
