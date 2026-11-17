@@ -290,3 +290,32 @@ test('a crash right after taking a monitor leaves nothing stuck', async () => {
   assert.equal('current_run_id' in (await call('GET', `/v1/monitors/${id}`)).body, false)
   restore()
 })
+
+test('last_run is the newest succeeded or failed run, never a skipped one', async () => {
+  const { call, ctx } = await makeApp()
+  const id = await createMonitor(call)
+  assert.equal('last_run' in (await call('GET', `/v1/monitors/${id}`)).body, false) // no runs yet
+
+  const add = (runId, status, finished) =>
+    ctx.db.run(
+      `INSERT INTO runs (id, monitor_id, trigger_kind, status, created_at, finished_at, change_count)
+       VALUES (?, ?, 'schedule', ?, '2026-11-17T00:00:00Z', ?, 2)`,
+      [runId, id, status, finished],
+    )
+  await add('run_001', 'succeeded', '2026-11-17T09:00:00Z')
+  await add('run_002', 'failed', '2026-11-17T10:00:00Z')
+  let last = (await call('GET', `/v1/monitors/${id}`)).body.last_run
+  assert.deepEqual(last, { id: 'run_002', status: 'failed', change_count: 2, finished_at: '2026-11-17T10:00:00Z' })
+
+  // a skipped run and a run in progress don't count
+  await add('run_003', 'skipped', '2026-11-17T10:30:00Z')
+  await add('run_004', 'running', null)
+  last = (await call('GET', `/v1/monitors/${id}`)).body.last_run
+  assert.equal(last.id, 'run_002')
+
+  // the list endpoint fills it the same way, per monitor
+  const other = await createMonitor(call, { name: 'other' })
+  const list = (await call('GET', '/v1/monitors')).body.data
+  assert.equal(list.find((m) => m.id === id).last_run.id, 'run_002')
+  assert.equal('last_run' in list.find((m) => m.id === other), false)
+})

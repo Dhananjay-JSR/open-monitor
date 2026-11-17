@@ -21,6 +21,12 @@ export function dropNulls(obj) {
   return out
 }
 
+function lastRunOf(lastRuns, monitorId) {
+  const run = lastRuns.find((r) => r.monitor_id === monitorId)
+  if (!run) return null
+  return { id: run.id, status: run.status, change_count: run.change_count, finished_at: run.finished_at }
+}
+
 function targetFromRow(row, domains) {
   const target = { type: row.type }
   if (row.type === 'search') {
@@ -62,9 +68,15 @@ async function loadMonitors(db, rows) {
     `SELECT id, monitor_id FROM runs WHERE monitor_id IN (${marks}) AND status IN ('queued', 'running')`,
     ids,
   )
+  // last_run is the newest succeeded or failed run. A monitor never has two runs at once,
+  // so the newest one by id is also the one that finished last.
   const lastRuns = await db.all(
-    `SELECT id, status, change_count, finished_at FROM runs WHERE id IN (${marks})`,
-    rows.map((r) => r.last_run_id),
+    `SELECT r.id, r.monitor_id, r.status, r.change_count, r.finished_at FROM runs r
+     WHERE r.monitor_id IN (${marks}) AND r.id = (
+       SELECT max(id) FROM runs
+       WHERE monitor_id = r.monitor_id AND status IN ('succeeded', 'failed')
+     )`,
+    ids,
   )
 
   return rows.map((row) => {
@@ -97,7 +109,7 @@ async function loadMonitors(db, rows) {
       pause_reason: row.pause_reason,
       current_run_id: activeRuns.find((r) => r.monitor_id === row.id)?.id ?? null,
       next_run_at: row.next_run_at,
-      last_run: lastRuns.find((r) => r.id === row.last_run_id) ?? null,
+      last_run: lastRunOf(lastRuns, row.id),
       created_at: row.created_at,
       updated_at: row.updated_at,
 

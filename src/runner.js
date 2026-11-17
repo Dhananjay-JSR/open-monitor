@@ -201,11 +201,10 @@ async function finish(ctx, monitor, run, status, error) {
   // the run row is no longer queued or running, so the monitor is free again
   await ctx.db.run(
     `UPDATE monitors SET
-       last_run_id = ?,
        window_to = COALESCE(?, window_to),
        fail_streak = ${sourceFailed ? 'fail_streak + 1' : '0'}
      WHERE id = ?`,
-    [run.id, windowTo, run.monitor_id],
+    [windowTo, run.monitor_id],
   )
   if (!monitor) return
 

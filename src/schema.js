@@ -11,7 +11,6 @@ export const SCHEMA = [
     status TEXT NOT NULL,
     pause_reason TEXT,
     next_run_at TEXT,
-    last_run_id TEXT,
     webhook_url TEXT,
     webhook_events TEXT,
     webhook_secret TEXT,
