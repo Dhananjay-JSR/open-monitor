@@ -58,6 +58,10 @@ async function loadMonitors(db, rows) {
     `SELECT * FROM monitor_metadata WHERE monitor_id IN (${marks}) ORDER BY rowid`,
     ids,
   )
+  const activeRuns = await db.all(
+    `SELECT id, monitor_id FROM runs WHERE monitor_id IN (${marks}) AND status IN ('queued', 'running')`,
+    ids,
+  )
   const lastRuns = await db.all(
     `SELECT id, status, change_count, finished_at FROM runs WHERE id IN (${marks})`,
     rows.map((r) => r.last_run_id),
@@ -91,7 +95,7 @@ async function loadMonitors(db, rows) {
       metadata: meta,
       status: row.status,
       pause_reason: row.pause_reason,
-      current_run_id: row.current_run_id,
+      current_run_id: activeRuns.find((r) => r.monitor_id === row.id)?.id ?? null,
       next_run_at: row.next_run_at,
       last_run: lastRuns.find((r) => r.id === row.last_run_id) ?? null,
       created_at: row.created_at,
@@ -133,21 +137,46 @@ export async function listMonitors(db, after, limit) {
 
 // Takes the oldest monitor that is due and not already running, and marks it as running,
 // in one statement so two ticks can never take the same one. Returns the monitor or undefined.
-export async function claimNextDue(db, runId, at) {
-  const rows = await db.all(
-    `UPDATE monitors SET current_run_id = ?
-     WHERE id = (
-       SELECT id FROM monitors
-       WHERE status = 'active' AND next_run_at <= ? AND current_run_id IS NULL
-       ORDER BY next_run_at
-       LIMIT 1
-     )
-     AND current_run_id IS NULL
-     RETURNING id`,
-    [runId, at],
+const NO_ACTIVE_RUN = `NOT EXISTS (
+  SELECT 1 FROM runs r WHERE r.monitor_id = m.id AND r.status IN ('queued', 'running')
+)`
+
+// Takes the oldest monitor that is due and has no active run, by creating its run row.
+// One statement, so there is nothing for a crash to split; OR IGNORE plus the unique index
+// means two ticks can never both get the same monitor. Returns the monitor or undefined.
+export async function claimNextDue(db, run) {
+  const result = await db.run(
+    `INSERT OR IGNORE INTO runs (id, monitor_id, trigger_kind, status, created_at, started_at)
+     SELECT ?, m.id, 'schedule', 'running', ?, ?
+     FROM monitors m
+     WHERE m.status = 'active' AND m.next_run_at <= ? AND ${NO_ACTIVE_RUN}
+     ORDER BY m.next_run_at
+     LIMIT 1`,
+    [run.id, run.created_at, run.started_at, run.created_at],
   )
-  if (rows.length === 0) return undefined
-  return getMonitor(db, rows[0].id)
+  if (result.changes === 0) return undefined
+  const rows = await db.all('SELECT monitor_id FROM runs WHERE id = ?', [run.id])
+  return getMonitor(db, rows[0].monitor_id)
+}
+
+// Queues a manual run, unless the monitor already has an active one. Returns true if queued.
+export async function claimManualRun(db, run) {
+  const result = await db.run(
+    `INSERT OR IGNORE INTO runs (id, monitor_id, trigger_kind, status, created_at)
+     SELECT ?, m.id, 'manual', 'queued', ?
+     FROM monitors m
+     WHERE m.id = ? AND m.status = 'active' AND ${NO_ACTIVE_RUN}`,
+    [run.id, run.created_at, run.monitor_id],
+  )
+  return result.changes === 1
+}
+
+export async function activeRunId(db, monitorId) {
+  const rows = await db.all(
+    `SELECT id FROM runs WHERE monitor_id = ? AND status IN ('queued', 'running')`,
+    [monitorId],
+  )
+  return rows[0]?.id ?? null
 }
 
 function scheduleColumns(schedule) {

@@ -84,19 +84,14 @@ async function startQueuedRuns(ctx) {
 async function startDueMonitors(ctx) {
   while (true) {
     const run = newRun(null, 'schedule', 'running')
-    const monitor = await store.claimNextDue(ctx.db, run.id, now())
+    const monitor = await store.claimNextDue(ctx.db, run)
     if (!monitor) break
 
-    // we own the monitor now, so nobody else is racing us for next_run_at
+    // the unique index guarantees nobody else is running this monitor, so this can't race
     const next = iso(nextRun(monitor.schedule, Date.now()))
-    await ctx.db.run('UPDATE monitors SET next_run_at = ? WHERE id = ? AND current_run_id = ?', [
-      next,
-      monitor.id,
-      run.id,
-    ])
+    await ctx.db.run('UPDATE monitors SET next_run_at = ? WHERE id = ?', [next, monitor.id])
 
     run.monitor_id = monitor.id
-    await store.insertRun(ctx.db, run)
     await execute(ctx, run)
   }
 }
@@ -203,14 +198,14 @@ async function finish(ctx, monitor, run, status, error) {
 
   const sourceFailed = error && ['detect_failed', 'source_failed'].includes(error.code)
   const windowTo = status === 'succeeded' && run.window ? run.window.to : null
+  // the run row is no longer queued or running, so the monitor is free again
   await ctx.db.run(
     `UPDATE monitors SET
-       current_run_id = NULL,
        last_run_id = ?,
        window_to = COALESCE(?, window_to),
        fail_streak = ${sourceFailed ? 'fail_streak + 1' : '0'}
-     WHERE id = ? AND current_run_id = ?`,
-    [run.id, windowTo, run.monitor_id, run.id],
+     WHERE id = ?`,
+    [run.id, windowTo, run.monitor_id],
   )
   if (!monitor) return
 

@@ -11,7 +11,6 @@ export const SCHEMA = [
     status TEXT NOT NULL,
     pause_reason TEXT,
     next_run_at TEXT,
-    current_run_id TEXT,
     last_run_id TEXT,
     webhook_url TEXT,
     webhook_events TEXT,
@@ -74,6 +73,9 @@ export const SCHEMA = [
     trace_id TEXT
   )`,
   `CREATE INDEX IF NOT EXISTS runs_by_monitor ON runs (monitor_id, id)`,
+  // A monitor is "running" when it has a queued or running run. The database refuses a second one.
+  `CREATE UNIQUE INDEX IF NOT EXISTS one_active_run_per_monitor ON runs (monitor_id)
+    WHERE status IN ('queued', 'running')`,
 
   `CREATE TABLE IF NOT EXISTS run_changes (
     run_id TEXT NOT NULL,

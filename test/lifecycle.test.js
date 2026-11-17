@@ -129,7 +129,6 @@ test('pausing skips a queued run', async () => {
      VALUES ('run_q', ?, 'manual', 'queued', '2026-11-17T00:00:00Z')`,
     [id],
   )
-  await ctx.db.run(`UPDATE monitors SET current_run_id = 'run_q' WHERE id = ?`, [id])
 
   await call('POST', `/v1/monitors/${id}/pause`)
   const run = (await call('GET', `/v1/monitors/${id}/runs/run_q`)).body
@@ -165,7 +164,6 @@ test('tick fails runs that have been stuck for too long', async () => {
      VALUES ('run_stuck', ?, 'schedule', 'running', '2026-11-17T00:00:00Z', '2026-11-17T00:00:00Z')`,
     [id],
   )
-  await ctx.db.run(`UPDATE monitors SET current_run_id = 'run_stuck' WHERE id = ?`, [id])
 
   await call('POST', '/tick')
   const run = (await call('GET', `/v1/monitors/${id}/runs/run_stuck`)).body
@@ -185,7 +183,7 @@ test('a monitor whose last run is still going runs late, not skipped', async () 
      VALUES ('run_busy', ?, 'manual', 'running', '2026-11-17T00:00:00Z', ?)`,
     [id, new Date().toISOString()],
   )
-  await ctx.db.run(`UPDATE monitors SET current_run_id = 'run_busy', next_run_at = '2026-01-01T00:00:00Z' WHERE id = ?`, [id])
+  await ctx.db.run(`UPDATE monitors SET next_run_at = '2026-01-01T00:00:00Z' WHERE id = ?`, [id])
 
   await call('POST', '/tick')
   let monitor = (await call('GET', `/v1/monitors/${id}`)).body
@@ -194,7 +192,6 @@ test('a monitor whose last run is still going runs late, not skipped', async () 
 
   // the busy run ends: the very next tick runs the waiting slot
   await ctx.db.run(`UPDATE runs SET status = 'succeeded' WHERE id = 'run_busy'`)
-  await ctx.db.run(`UPDATE monitors SET current_run_id = NULL WHERE id = ?`, [id])
   await call('POST', '/tick')
   const runs = (await call('GET', `/v1/monitors/${id}/runs`)).body.data
   assert.equal(runs.length, 2)
@@ -247,4 +244,49 @@ test('the tick clears llm_calls rows older than a minute', async () => {
   await call('POST', '/tick')
   const rows = await ctx.db.all('SELECT id FROM llm_calls')
   assert.deepEqual(rows.map((r) => r.id), ['llm_new'])
+})
+
+test('the database refuses a second active run for the same monitor', async () => {
+  const { call, ctx } = await makeApp()
+  const id = await createMonitor(call)
+  const insert = (runId, status) =>
+    ctx.db.run(
+      `INSERT INTO runs (id, monitor_id, trigger_kind, status, created_at) VALUES (?, ?, 'manual', ?, '2026-11-17T00:00:00Z')`,
+      [runId, id, status],
+    )
+  await insert('run_one', 'running')
+  await assert.rejects(insert('run_two', 'queued'), /UNIQUE/)
+  await assert.rejects(insert('run_three', 'running'), /UNIQUE/)
+  // finished runs don't count, any number of them is fine
+  await insert('run_old1', 'succeeded')
+  await insert('run_old2', 'failed')
+  assert.equal((await call('GET', `/v1/monitors/${id}`)).body.current_run_id, 'run_one')
+})
+
+test('a crash right after taking a monitor leaves nothing stuck', async () => {
+  const { call, ctx } = await makeApp()
+  const restore = stubDetector(async () => {})
+  const id = await createMonitor(call)
+  await ctx.db.run(`UPDATE monitors SET next_run_at = '2026-01-01T00:00:00Z' WHERE id = ?`, [id])
+
+  // take the monitor the way a tick does, then "crash" before running it
+  const { claimNextDue } = await import('../src/store.js')
+  const { newRun } = await import('../src/runner.js')
+  const taken = await claimNextDue(ctx.db, { ...newRun(null, 'schedule', 'running'), id: 'run_crashed' })
+  assert.equal(taken.id, id)
+
+  // the monitor and its run row agree: there is no half-done state to get stuck in
+  assert.equal((await call('GET', `/v1/monitors/${id}`)).body.current_run_id, 'run_crashed')
+  const crashed = (await call('GET', `/v1/monitors/${id}/runs/run_crashed`)).body
+  assert.equal(crashed.status, 'running')
+
+  // 15 minutes later the stuck-run check fails it, and the monitor is free again
+  await ctx.db.run(`UPDATE runs SET started_at = '2026-01-01T00:00:00Z' WHERE id = 'run_crashed'`)
+  await ctx.db.run(`UPDATE monitors SET next_run_at = '2026-01-01T00:00:00Z' WHERE id = ?`, [id])
+  await call('POST', '/tick')
+  assert.equal((await call('GET', `/v1/monitors/${id}/runs/run_crashed`)).body.error.code, 'timed_out')
+  const runs = (await call('GET', `/v1/monitors/${id}/runs`)).body.data
+  assert.ok(runs.some((r) => r.id !== 'run_crashed' && r.status === 'succeeded'), 'the monitor ran again')
+  assert.equal('current_run_id' in (await call('GET', `/v1/monitors/${id}`)).body, false)
+  restore()
 })

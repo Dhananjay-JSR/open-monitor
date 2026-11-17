@@ -239,11 +239,6 @@ async function pauseMonitor(ctx, monitor) {
      WHERE monitor_id = ? AND status = 'queued'`,
     ['The monitor was paused before the run started', now(), monitor.id],
   )
-  await db.run(
-    `UPDATE monitors SET current_run_id = NULL
-     WHERE id = ? AND current_run_id IN (SELECT id FROM runs WHERE monitor_id = ? AND status = 'skipped')`,
-    [monitor.id, monitor.id],
-  )
   return json(200, monitorView(await store.getMonitor(db, monitor.id)))
 }
 
@@ -262,18 +257,12 @@ async function runNow(ctx, monitor, background) {
   const { db } = ctx
 
   const run = newRun(monitor.id, 'manual', 'queued')
-  const claimed = await db.run(
-    'UPDATE monitors SET current_run_id = ? WHERE id = ? AND current_run_id IS NULL',
-    [run.id, monitor.id],
-  )
-  if (claimed.changes === 0) {
-    const current = await store.getMonitor(db, monitor.id)
+  if (!(await store.claimManualRun(db, run))) {
     fail(409, 'run_in_progress', 'A run is already queued or running', {
-      current_run_id: current.current_run_id,
+      current_run_id: await store.activeRunId(db, monitor.id),
     })
   }
 
-  await store.insertRun(db, run)
   const queued = await store.getRun(db, monitor.id, run.id)
   // respond with the queued run right away, the tick does the actual work
   background(tick(ctx))
