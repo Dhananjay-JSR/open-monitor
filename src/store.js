@@ -253,6 +253,7 @@ export function deleteMonitor(db, id) {
     'seen_urls',
     'page_baselines',
     'deliveries',
+    'delivery_attempts',
   ]
   return db.batch([
     [`DELETE FROM run_changes WHERE run_id IN (${ownRuns})`, [id]],
@@ -318,6 +319,7 @@ async function loadRuns(db, rows) {
       error,
       created_at: row.created_at,
       finished_at: row.finished_at,
+      trace_id: row.trace_id, // not in the Perplexity API, handy for finding the run in a tracing tool
     })
   })
 }
@@ -403,4 +405,30 @@ export async function finishRun(db, run) {
   })
   if (statements.length > 0) await db.batch(statements)
   return true
+}
+
+// the delivery log, newest first
+export async function listDeliveryAttempts(db, monitorId, after, limit) {
+  const rows = await db.all(
+    'SELECT * FROM delivery_attempts WHERE monitor_id = ? AND id < ? ORDER BY id DESC LIMIT ?',
+    [monitorId, after ?? '~', limit + 1],
+  )
+  const data = rows.slice(0, limit).map((row) =>
+    dropNulls({
+      id: row.id,
+      object: 'monitor.delivery_attempt',
+      event_id: row.event_id,
+      event_type: row.event_type,
+      run_id: row.run_id,
+      target_host: row.target_host,
+      attempt: row.attempt,
+      delivered: Boolean(row.delivered),
+      status_code: row.status_code,
+      error: row.error,
+      duration_ms: row.duration_ms,
+      at: row.at,
+      trace_id: row.trace_id,
+    }),
+  )
+  return { data, has_more: rows.length > limit }
 }

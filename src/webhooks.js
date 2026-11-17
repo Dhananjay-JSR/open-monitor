@@ -4,6 +4,7 @@ import { iso, now } from './util.js'
 import { newId, signWebhook } from './crypto.js'
 import { getMonitor } from './store.js'
 import { isPrivateUrl } from './net.js'
+import { traceparent, hostOf } from './telemetry.js'
 
 // delay before each retry: 5s, 5m, 30m, 2h, 5h, 10h. Seven attempts in total.
 const RETRY_DELAYS_S = [5, 300, 1800, 7200, 18000, 36000]
@@ -28,13 +29,15 @@ export async function emit(ctx, monitor, type, run) {
   if (!monitor.webhook || !monitor.webhook.events.includes(type)) return
   const event = buildEvent(monitor, type, run)
   await ctx.db.run(
-    'INSERT INTO deliveries (id, monitor_id, body, attempt, next_at) VALUES (?, ?, ?, 0, ?)',
-    [event.id, monitor.id, JSON.stringify(event), now()],
+    `INSERT INTO deliveries (id, monitor_id, body, attempt, next_at, run_id, event_type, trace_id)
+     VALUES (?, ?, ?, 0, ?, ?, ?, ?)`,
+    [event.id, monitor.id, JSON.stringify(event), now(), run?.id ?? null, type, run?.trace_id ?? null],
   )
 }
 
 // One delivery attempt. Never throws, the outcome is in the returned object.
-export async function deliver(ctx, monitor, eventId, body) {
+// `span` is optional, when given its trace context is passed on to the receiver.
+export async function deliver(ctx, monitor, eventId, body, span) {
   const started = Date.now()
   const timestamp = String(Math.floor(started / 1000))
 
@@ -63,6 +66,7 @@ export async function deliver(ctx, monitor, eventId, body) {
         'webhook-id': eventId,
         'webhook-timestamp': timestamp,
         'webhook-signature': signatures.join(' '),
+        ...(span && { traceparent: traceparent(span) }),
       },
     })
     await res.body?.cancel()
@@ -96,6 +100,30 @@ export async function autoPause(ctx, monitor, reason, run) {
   await emit(ctx, { ...monitor, status: 'paused', pause_reason: reason }, 'monitor.paused', run)
 }
 
+// every attempt is written to the delivery log, whatever the outcome
+function recordAttempt(ctx, monitorId, delivery, host, result, traceId) {
+  return ctx.db.run(
+    `INSERT INTO delivery_attempts
+      (id, monitor_id, event_id, event_type, run_id, target_host, attempt, delivered, status_code, error, duration_ms, at, trace_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      newId('att_'),
+      monitorId,
+      delivery.id,
+      delivery.event_type ?? null,
+      delivery.run_id ?? null,
+      host,
+      delivery.attempt + 1,
+      result.delivered ? 1 : 0,
+      result.status_code ?? null,
+      result.error ?? null,
+      result.duration_ms,
+      now(),
+      traceId,
+    ],
+  )
+}
+
 // Sends everything that is due. Called from the tick.
 export async function sendDueDeliveries(ctx) {
   const due = await ctx.db.all('SELECT * FROM deliveries WHERE next_at <= ? ORDER BY next_at', [now()])
@@ -117,13 +145,29 @@ export async function sendDueDeliveries(ctx) {
       continue
     }
 
-    const result = await deliver(ctx, monitor, delivery.id, delivery.body)
+    const host = hostOf(monitor.webhook.url)
+    // same trace as the run that caused the event, when there was one
+    const parent = delivery.trace_id ? { traceId: delivery.trace_id } : undefined
+    const span = ctx.telemetry.startSpan(
+      'webhook.delivery',
+      { 'monitor.id': monitor.id, 'event.id': delivery.id, 'event.type': delivery.event_type, 'webhook.host': host, 'webhook.attempt': delivery.attempt + 1 },
+      parent,
+    )
+    const result = await deliver(ctx, monitor, delivery.id, delivery.body, span)
+    span.end({ 'http.status_code': result.status_code, 'webhook.delivered': result.delivered }, result.error)
+    await recordAttempt(ctx, monitor.id, delivery, host, result, span.traceId)
+
     const attemptsLeft = delivery.attempt < RETRY_DELAYS_S.length
-    if (!result.delivered && shouldRetry(result) && attemptsLeft) continue
+    if (!result.delivered && shouldRetry(result) && attemptsLeft) {
+      ctx.telemetry.count('open_monitor.deliveries', { outcome: 'retry' })
+      continue
+    }
 
     await ctx.db.run('DELETE FROM deliveries WHERE id = ?', [delivery.id])
+    ctx.telemetry.count('open_monitor.deliveries', { outcome: result.delivered ? 'delivered' : 'gave_up' })
     if (!result.delivered) {
       // gave up on this one. A dead endpoint pauses the monitor so it gets noticed.
+      ctx.telemetry.log('WARN', 'webhook delivery gave up, pausing monitor', { 'monitor.id': monitor.id, 'event.id': delivery.id, 'webhook.host': host }, span)
       await autoPause(ctx, monitor, 'webhook_failing')
     }
   }

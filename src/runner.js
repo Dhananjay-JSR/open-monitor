@@ -45,6 +45,7 @@ export async function tick(ctx) {
   await sendDueDeliveries(ctx)
   await deleteOldRuns(ctx)
   await pruneAuthTables(ctx)
+  await ctx.telemetry.flush()
 }
 
 // if the process died mid-run the monitor would stay "busy" forever
@@ -106,6 +107,7 @@ async function deleteOldRuns(ctx) {
     ['DELETE FROM run_changes WHERE run_id < ?', [cutoff]],
     ['DELETE FROM run_target_errors WHERE run_id < ?', [cutoff]],
     ['DELETE FROM runs WHERE id < ?', [cutoff]],
+    ['DELETE FROM delivery_attempts WHERE id < ?', [idAt('att_', Date.now() - KEEP_RUNS_DAYS * DAY_MS)]],
   ])
 }
 
@@ -123,10 +125,19 @@ async function execute(ctx, run) {
   const monitor = await store.getMonitor(ctx.db, run.monitor_id)
   if (!monitor) return // deleted while the run was queued
 
+  // one trace per run. search, page fetches, judge calls and deliveries hang off this span
+  run.span = ctx.telemetry.startSpan('monitor.run', {
+    'monitor.id': monitor.id,
+    'run.id': run.id,
+    'run.trigger': run.trigger,
+    'target.type': monitor.targets[0].type,
+  })
+
   run.window = runWindow(monitor, Date.now())
-  await ctx.db.run('UPDATE runs SET window_from = ?, window_to = ? WHERE id = ?', [
+  await ctx.db.run('UPDATE runs SET window_from = ?, window_to = ?, trace_id = ? WHERE id = ?', [
     run.window.from,
     run.window.to,
+    run.span.traceId,
     run.id,
   ])
 
@@ -171,6 +182,22 @@ async function finish(ctx, monitor, run, status, error) {
 
   const saved = await store.finishRun(ctx.db, run)
   if (!saved) return // already finished elsewhere, e.g. marked as timed out
+
+  const { telemetry } = ctx
+  telemetry.count('open_monitor.runs', { status, trigger: run.trigger ?? 'unknown' })
+  if (error) {
+    telemetry.log('ERROR', `run failed: ${error.message}`, { 'monitor.id': run.monitor_id, 'run.id': run.id, 'error.code': error.code }, run.span)
+  }
+  run.span?.end(
+    {
+      'run.status': status,
+      'run.candidates': run.counts.candidates,
+      'run.changes': run.changes.length,
+      'run.errors': run.counts.errors,
+      'error.code': error?.code,
+    },
+    error?.message,
+  )
 
   const sourceFailed = error && ['detect_failed', 'source_failed'].includes(error.code)
   const windowTo = status === 'succeeded' && run.window ? run.window.to : null

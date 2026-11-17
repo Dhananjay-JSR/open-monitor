@@ -66,8 +66,9 @@ async function askHttp(env, prompt) {
 // Scores items one by one. Returns an array with a number per item, or null where that
 // item couldn't be judged (callers leave those for the next run).
 // Throws judge_failed if nothing at all could be judged.
-export async function judge(ctx, goal, items) {
-  const { env } = ctx
+// `parentSpan` is optional and only used for tracing.
+export async function judge(ctx, goal, items, parentSpan) {
+  const { env, telemetry } = ctx
   if (!judgeConfigured(env)) {
     throw runError('judge_failed', 'No LLM is configured: set LLM_API_KEY, LLM_BASE_URL or LLM_COMMAND')
   }
@@ -81,10 +82,17 @@ export async function judge(ctx, goal, items) {
 
   for (let i = 0; i < items.length && !rateLimited; i++) {
     const prompt = `Goal: ${goal}\n\nCandidate:\n${items[i].slice(0, MAX_CANDIDATE_CHARS)}`
+    const span = telemetry?.startSpan(
+      'judge.call',
+      { 'judge.mode': env.LLM_COMMAND ? 'command' : 'http', 'judge.model': env.LLM_COMMAND ? undefined : env.LLM_MODEL ?? DEFAULT_MODEL },
+      parentSpan,
+    )
     try {
       if (env.LLM_COMMAND) {
         // prompt goes in on stdin, never on the command line
         scores[i] = parseScore(await ctx.exec(env.LLM_COMMAND, `${INSTRUCTIONS}\n\n${prompt}`))
+        span?.end({ 'judge.score': scores[i] })
+        telemetry?.count('open_monitor.judge_calls', { outcome: scores[i] === null ? 'unusable' : 'scored' })
         continue
       }
 
@@ -95,6 +103,7 @@ export async function judge(ctx, goal, items) {
           break
         }
         lastProblem = 'the LLM rate limit was reached'
+        telemetry?.count('open_monitor.judge_rate_limited')
         if (attempt === RATE_LIMIT_RETRIES) {
           // still limited after waiting: stop here, the rest will be judged next run
           rateLimited = true
@@ -102,8 +111,12 @@ export async function judge(ctx, goal, items) {
           await sleep(answer.retryAfter * 1000)
         }
       }
+      span?.end({ 'judge.score': scores[i], 'judge.rate_limited': rateLimited || undefined })
+      telemetry?.count('open_monitor.judge_calls', { outcome: scores[i] === null ? 'unusable' : 'scored' })
     } catch (e) {
       lastProblem = e.message
+      span?.end({}, e.message)
+      telemetry?.count('open_monitor.judge_calls', { outcome: 'error' })
     }
   }
 

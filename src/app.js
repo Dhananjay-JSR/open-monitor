@@ -331,6 +331,13 @@ async function route(ctx, req, background) {
     if (action === '/webhook/test') return testWebhook(ctx, monitor)
   }
 
+  // extension to the Perplexity API: the webhook delivery log for this monitor
+  if (method === 'GET' && action === '/deliveries') {
+    const limit = validLimit(url.searchParams.get('limit'))
+    const page = await store.listDeliveryAttempts(ctx.db, id, url.searchParams.get('after'), limit)
+    return json(200, { object: 'list', data: page.data, has_more: page.has_more })
+  }
+
   if (method === 'GET' && action === '/runs') {
     const limit = validLimit(url.searchParams.get('limit'))
     const page = await store.listRuns(ctx.db, id, url.searchParams.get('after'), limit)
@@ -349,9 +356,15 @@ async function route(ctx, req, background) {
 // `background` takes a promise that should keep running after the response is sent
 // (ctx.waitUntil on Workers, fire-and-forget on Node).
 export async function handle(ctx, req, background) {
+  const span = ctx.telemetry.startSpan('http.request', { 'http.method': req.method })
+  let response
   try {
-    return await route(ctx, req, background)
+    response = await route(ctx, req, background)
   } catch (e) {
-    return errorResponse(e)
+    response = errorResponse(e)
   }
+  // the path is left out on purpose, ids are fine but query strings and tokens are not
+  span.end({ 'http.status_code': response.status }, response.status >= 500 ? 'server error' : undefined)
+  if (ctx.telemetry.enabled) background(ctx.telemetry.flush())
+  return response
 }

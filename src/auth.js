@@ -107,10 +107,15 @@ export async function login(ctx, req) {
   const passwordOk = await safeEqual(password, ctx.env.DASHBOARD_PASSWORD)
   if (!key.known || !passwordOk) {
     await recordFailure(ctx, key, failuresSoFar)
+    ctx.telemetry.count('open_monitor.logins', { outcome: 'failed' })
+    if (failuresSoFar + 1 >= MAX_FAILURES) {
+      ctx.telemetry.log('WARN', 'login locked after repeated failures', { 'client.ip': key.ip })
+    }
     fail(401, 'invalid_credentials', 'Wrong username or password')
   }
 
   await ctx.db.run('DELETE FROM login_attempts WHERE username = ? AND ip = ?', [key.username, key.ip])
+  ctx.telemetry.count('open_monitor.logins', { outcome: 'ok' })
 
   const token = randomToken()
   const signature = await hmacHex(ctx.env.SESSION_SECRET, token)

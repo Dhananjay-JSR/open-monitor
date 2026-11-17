@@ -6,6 +6,7 @@ import { migrate } from './store.js'
 import { handle } from './app.js'
 import { tick } from './runner.js'
 import { judgeConfigured } from './judge.js'
+import { createTelemetry } from './telemetry.js'
 
 const env = process.env
 const port = Number(env.PORT ?? 8787)
@@ -21,7 +22,7 @@ if (!judgeConfigured(env)) {
   )
 }
 
-const ctx = { env, db: openDb(env.DB_PATH ?? 'monitor.db'), exec }
+const ctx = { env, db: openDb(env.DB_PATH ?? 'monitor.db'), exec, telemetry: createTelemetry(env) }
 await migrate(ctx.db)
 
 function background(promise) {

@@ -6,6 +6,7 @@ import { htmlToText, unifiedDiff } from './text.js'
 import { judge } from './judge.js'
 import { renderPage } from './cdp.js'
 import { isPrivateUrl } from './net.js'
+import { hostOf } from './telemetry.js'
 
 const USER_AGENT = 'Mozilla/5.0 (compatible; open-monitor/0.1)'
 const MAX_REDIRECTS = 5
@@ -89,10 +90,17 @@ export async function runPages(ctx, monitor, run) {
   const changed = []
 
   for (const target of monitor.targets) {
+    const span = ctx.telemetry.startSpan(
+      'page.fetch',
+      { 'page.host': hostOf(target.url), 'page.renderer': ctx.env.BROWSER_WS_URL ? 'browser' : 'plain' },
+      run.span,
+    )
     let html
     try {
       html = await fetchHtml(ctx.env, target.url)
+      span.end({ 'page.bytes': html.length })
     } catch (e) {
+      span.end({}, e.message)
       run.target_errors.push(targetError(target.url, e))
       continue
     }
@@ -133,7 +141,7 @@ export async function runPages(ctx, monitor, run) {
   if (changed.length === 0) return
 
   const goal = monitor.goal || DEFAULT_GOAL
-  const scores = await judge(ctx, goal, changed.map((c) => `Page: ${c.target.url}\nDiff:\n${c.diff.unified}`))
+  const scores = await judge(ctx, goal, changed.map((c) => `Page: ${c.target.url}\nDiff:\n${c.diff.unified}`), run.span)
 
   for (let i = 0; i < changed.length; i++) {
     const page = changed[i]

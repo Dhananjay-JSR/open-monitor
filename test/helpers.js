@@ -3,6 +3,7 @@ import { openDb } from '../src/db-node.js'
 import { exec } from '../src/exec.js'
 import { migrate } from '../src/store.js'
 import { handle } from '../src/app.js'
+import { createTelemetry } from '../src/telemetry.js'
 
 // Judge stand-in for tests: candidates containing KEEP score high, everything else low.
 export const KEEPWORD_JUDGE = `grep -q KEEP && echo '{"score": 0.9}' || echo '{"score": 0.2}'`
@@ -15,6 +16,7 @@ export async function makeApp(env = {}) {
     db: openDb(':memory:'),
     exec,
   }
+  ctx.telemetry = createTelemetry(ctx.env)
   await migrate(ctx.db)
 
   const pending = []

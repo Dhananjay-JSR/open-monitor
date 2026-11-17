@@ -101,7 +101,16 @@ export async function runSearch(ctx, monitor, run) {
   const { db } = ctx
   const target = monitor.targets[0]
 
-  const results = await search(ctx.env, target, run.window)
+  const provider = ctx.env.SEARXNG_URL ? 'searxng' : 'tavily'
+  const span = ctx.telemetry.startSpan('search', { 'search.provider': provider }, run.span)
+  let results
+  try {
+    results = await search(ctx.env, target, run.window)
+    span.end({ 'search.results': results.length })
+  } catch (e) {
+    span.end({}, e.message)
+    throw e
+  }
   const fresh = applyFilters(results, target.filters, Date.parse(run.window.from))
   if (fresh.length === 0) return
 
@@ -116,7 +125,7 @@ export async function runSearch(ctx, monitor, run) {
   if (candidates.length === 0) return
 
   const goal = `${monitor.goal || DEFAULT_GOAL}\nSearch query: ${target.query}`
-  const scores = await judge(ctx, goal, candidates.map((c) => `${c.title}\n${c.url}\n${c.content}`))
+  const scores = await judge(ctx, goal, candidates.map((c) => `${c.title}\n${c.url}\n${c.content}`), run.span)
   const threshold = target.judge?.threshold ?? 0.5
 
   for (let i = 0; i < candidates.length; i++) {

@@ -70,7 +70,8 @@ export const SCHEMA = [
     error_message TEXT,
     created_at TEXT NOT NULL,
     started_at TEXT,
-    finished_at TEXT
+    finished_at TEXT,
+    trace_id TEXT
   )`,
   `CREATE INDEX IF NOT EXISTS runs_by_monitor ON runs (monitor_id, id)`,
 
@@ -123,8 +124,29 @@ export const SCHEMA = [
     monitor_id TEXT NOT NULL,
     body TEXT NOT NULL,
     attempt INTEGER NOT NULL,
-    next_at TEXT NOT NULL
+    next_at TEXT NOT NULL,
+    run_id TEXT,
+    event_type TEXT,
+    trace_id TEXT
   )`,
+
+  // one row per webhook attempt, kept as a delivery log
+  `CREATE TABLE IF NOT EXISTS delivery_attempts (
+    id TEXT PRIMARY KEY,
+    monitor_id TEXT NOT NULL,
+    event_id TEXT NOT NULL,
+    event_type TEXT,
+    run_id TEXT,
+    target_host TEXT NOT NULL,
+    attempt INTEGER NOT NULL,
+    delivered INTEGER NOT NULL,
+    status_code INTEGER,
+    error TEXT,
+    duration_ms INTEGER NOT NULL,
+    at TEXT NOT NULL,
+    trace_id TEXT
+  )`,
+  `CREATE INDEX IF NOT EXISTS attempts_by_monitor ON delivery_attempts (monitor_id, id)`,
 
   `CREATE TABLE IF NOT EXISTS sessions (
     token_hash TEXT PRIMARY KEY,
