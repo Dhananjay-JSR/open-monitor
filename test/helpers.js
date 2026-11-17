@@ -10,13 +10,15 @@ export async function makeApp(env = {}) {
   }
   await migrate(ctx.db)
 
+  const pending = []
+
   async function call(method, path, body, headers = {}) {
     const req = new Request('http://monitor.test' + path, {
       method,
       headers: { authorization: 'Bearer test-key', ...headers },
       body: body === undefined ? undefined : JSON.stringify(body),
     })
-    const res = await handle(ctx, req)
+    const res = await handle(ctx, req, (promise) => pending.push(promise))
     const text = await res.text()
     let parsed = text
     try {
@@ -25,7 +27,12 @@ export async function makeApp(env = {}) {
     return { status: res.status, body: parsed, headers: res.headers }
   }
 
-  return { ctx, call }
+  // wait for background work kicked off by requests (manual runs)
+  async function settle() {
+    while (pending.length) await pending.shift()
+  }
+
+  return { ctx, call, settle }
 }
 
 export function searchMonitor(overrides = {}) {

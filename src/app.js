@@ -3,6 +3,7 @@ import { iso, now } from './util.js'
 import { newId, newWebhookSecret, sha256, safeEqual } from './crypto.js'
 import { nextRun } from './schedule.js'
 import * as store from './store.js'
+import { tick, newRun } from './runner.js'
 import {
   ApiError,
   fail,
@@ -179,7 +180,61 @@ async function updateMonitor(ctx, req, monitor) {
   return json(200, monitorView(await store.getMonitor(ctx.db, monitor.id), generatedSecret))
 }
 
-async function route(ctx, req) {
+async function pauseMonitor(ctx, monitor) {
+  if (monitor.status !== 'active') fail(409, 'invalid_state', 'Monitor is already paused')
+  const { db } = ctx
+  await db.run(
+    `UPDATE monitors SET status = 'paused', pause_reason = 'user', next_run_at = NULL WHERE id = ?`,
+    [monitor.id],
+  )
+  // a run that hasn't started yet is cancelled. One that is already running is left to finish.
+  await db.run(
+    `UPDATE runs SET status = 'skipped', skip_reason = 'user', error_message = ?, finished_at = ?
+     WHERE monitor_id = ? AND status = 'queued'`,
+    ['The monitor was paused before the run started', now(), monitor.id],
+  )
+  await db.run(
+    `UPDATE monitors SET current_run_id = NULL
+     WHERE id = ? AND current_run_id IN (SELECT id FROM runs WHERE monitor_id = ? AND status = 'skipped')`,
+    [monitor.id, monitor.id],
+  )
+  return json(200, monitorView(await store.getMonitor(db, monitor.id)))
+}
+
+async function resumeMonitor(ctx, monitor) {
+  if (monitor.status === 'active') fail(409, 'invalid_state', 'Monitor is not paused')
+  const next = iso(nextRun(monitor.schedule, Date.now()))
+  await ctx.db.run(
+    `UPDATE monitors SET status = 'active', pause_reason = NULL, fail_streak = 0, next_run_at = ? WHERE id = ?`,
+    [next, monitor.id],
+  )
+  return json(200, monitorView(await store.getMonitor(ctx.db, monitor.id)))
+}
+
+async function runNow(ctx, monitor, background) {
+  if (monitor.status !== 'active') fail(409, 'invalid_state', 'Monitor is paused; resume it first')
+  const { db } = ctx
+
+  const run = newRun(monitor.id, 'manual', 'queued')
+  const claimed = await db.run(
+    'UPDATE monitors SET current_run_id = ? WHERE id = ? AND current_run_id IS NULL',
+    [run.id, monitor.id],
+  )
+  if (claimed.changes === 0) {
+    const current = await store.getMonitor(db, monitor.id)
+    fail(409, 'run_in_progress', 'A run is already queued or running', {
+      current_run_id: current.current_run_id,
+    })
+  }
+
+  await store.insertRun(db, run)
+  const queued = await store.getRun(db, monitor.id, run.id)
+  // respond with the queued run right away, the tick does the actual work
+  background(tick(ctx))
+  return json(202, queued)
+}
+
+async function route(ctx, req, background) {
   const url = new URL(req.url)
   const path = url.pathname.replace(/\/+$/, '')
   const method = req.method
@@ -187,6 +242,12 @@ async function route(ctx, req) {
   if (path === '/health') return json(200, { ok: true })
 
   await requireApiKey(ctx, req)
+
+  // for hosts with no long-running process: point any external cron at this
+  if (path === '/tick' && method === 'POST') {
+    await tick(ctx)
+    return json(200, { ok: true })
+  }
 
   if (path === '/v1/monitors') {
     if (method === 'POST') return createMonitor(ctx, req)
@@ -218,12 +279,32 @@ async function route(ctx, req) {
     }
   }
 
+  if (method === 'POST') {
+    if (action === '/pause') return pauseMonitor(ctx, monitor)
+    if (action === '/resume') return resumeMonitor(ctx, monitor)
+    if (action === '/run') return runNow(ctx, monitor, background)
+  }
+
+  if (method === 'GET' && action === '/runs') {
+    const limit = validLimit(url.searchParams.get('limit'))
+    const page = await store.listRuns(ctx.db, id, url.searchParams.get('after'), limit)
+    return json(200, { object: 'list', data: page.data, has_more: page.has_more })
+  }
+
+  if (method === 'GET' && action.startsWith('/runs/')) {
+    const run = await store.getRun(ctx.db, id, action.slice('/runs/'.length))
+    if (!run) fail(404, 'not_found', 'Run not found')
+    return json(200, run)
+  }
+
   fail(404, 'not_found', 'Not found')
 }
 
-export async function handle(ctx, req) {
+// `background` takes a promise that should keep running after the response is sent
+// (ctx.waitUntil on Workers, fire-and-forget on Node).
+export async function handle(ctx, req, background) {
   try {
-    return await route(ctx, req)
+    return await route(ctx, req, background)
   } catch (e) {
     return errorResponse(e)
   }
