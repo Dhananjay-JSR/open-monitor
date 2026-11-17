@@ -1,0 +1,13 @@
+{
+  "name": "open-monitor",
+  "version": "0.1.0",
+  "description": "Self-hosted, open-source server that speaks Perplexity's Monitor API",
+  "license": "MIT",
+  "type": "module",
+  "private": true,
+  "engines": { "node": ">=24" },
+  "scripts": {
+    "start": "node --env-file-if-exists=.env src/node.js",
+    "test": "node --test"
+  }
+}
