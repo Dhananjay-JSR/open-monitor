@@ -3,13 +3,17 @@ import { iso, now, runError } from './util.js'
 import { newId, idAt } from './crypto.js'
 import { nextRun } from './schedule.js'
 import * as store from './store.js'
+import { judgeConfigured } from './judge.js'
+import { runSearch } from './search-monitor.js'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 const STALE_AFTER_MS = 15 * 60 * 1000
 const KEEP_RUNS_DAYS = 90
 
 // target type -> async (ctx, monitor, run). Fills in run.counts, run.changes, run.target_errors.
-export const detectors = {}
+export const detectors = {
+  search: runSearch,
+}
 
 export function newRun(monitorId, trigger, status) {
   const createdAt = now()
@@ -120,6 +124,10 @@ async function execute(ctx, run) {
   ])
 
   try {
+    // without a judge we'd have to report everything or nothing, so don't run at all
+    if (!judgeConfigured(ctx.env)) {
+      throw runError('judge_failed', 'No LLM is configured: set LLM_API_KEY, LLM_BASE_URL or LLM_COMMAND')
+    }
     const type = monitor.targets[0].type
     const detect = detectors[type]
     if (!detect) throw runError('detect_failed', `No detector for "${type}" targets`)
