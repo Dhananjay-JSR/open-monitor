@@ -148,6 +148,13 @@ export const SCHEMA = [
   )`,
   `CREATE INDEX IF NOT EXISTS attempts_by_monitor ON delivery_attempts (monitor_id, id)`,
 
+  // one row per LLM call in the last minute, shared by every process, for the rate limit
+  `CREATE TABLE IF NOT EXISTS llm_calls (
+    id TEXT PRIMARY KEY,
+    at TEXT NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS llm_calls_by_time ON llm_calls (at)`,
+
   `CREATE TABLE IF NOT EXISTS sessions (
     token_hash TEXT PRIMARY KEY,
     username TEXT NOT NULL,

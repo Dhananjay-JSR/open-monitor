@@ -108,6 +108,8 @@ async function deleteOldRuns(ctx) {
     ['DELETE FROM run_target_errors WHERE run_id < ?', [cutoff]],
     ['DELETE FROM runs WHERE id < ?', [cutoff]],
     ['DELETE FROM delivery_attempts WHERE id < ?', [idAt('att_', Date.now() - KEEP_RUNS_DAYS * DAY_MS)]],
+    // the rate limit only looks at the last minute
+    ['DELETE FROM llm_calls WHERE at < ?', [new Date(Date.now() - 60_000).toISOString()]],
   ])
 }
 

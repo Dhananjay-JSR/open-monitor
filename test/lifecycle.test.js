@@ -239,3 +239,12 @@ test('a monitor that comes due while a tick is busy is run by the same tick', as
   assert.equal((await call('GET', `/v1/monitors/${second}/runs`)).body.data.length, 1)
   restore()
 })
+
+test('the tick clears llm_calls rows older than a minute', async () => {
+  const { call, ctx } = await makeApp()
+  await ctx.db.run('INSERT INTO llm_calls (id, at) VALUES (?, ?)', ['llm_old', new Date(Date.now() - 120_000).toISOString()])
+  await ctx.db.run('INSERT INTO llm_calls (id, at) VALUES (?, ?)', ['llm_new', new Date().toISOString()])
+  await call('POST', '/tick')
+  const rows = await ctx.db.all('SELECT id FROM llm_calls')
+  assert.deepEqual(rows.map((r) => r.id), ['llm_new'])
+})

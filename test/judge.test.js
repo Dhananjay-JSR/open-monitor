@@ -97,3 +97,63 @@ test('command mode gets the prompt on stdin', async () => {
 
   await assert.rejects(judge({ env: { LLM_COMMAND: 'exit 3' }, exec }, 'g', ['a']), { code: 'judge_failed' })
 })
+
+import { openDb } from '../src/db-node.js'
+import { migrate } from '../src/store.js'
+import { takeLlmSlot } from '../src/judge.js'
+
+async function limiterCtx(env) {
+  const db = openDb(':memory:')
+  await migrate(db)
+  return { env, db }
+}
+
+// pretend `count` calls went out `ageMs` ago
+async function fillWindow(db, count, ageMs) {
+  for (let i = 0; i < count; i++) {
+    await db.run('INSERT INTO llm_calls (id, at) VALUES (?, ?)', [`llm_old${i}`, new Date(Date.now() - ageMs).toISOString()])
+  }
+}
+
+test('rate limit: under the limit a call goes straight through and is recorded', async () => {
+  const ctx = await limiterCtx({ LLM_REQUESTS_PER_MINUTE: '3' })
+  await fillWindow(ctx.db, 2, 10_000)
+  assert.equal(await takeLlmSlot(ctx), 0)
+  assert.equal((await ctx.db.all('SELECT count(*) AS n FROM llm_calls'))[0].n, 3)
+})
+
+test('rate limit: when full, a call waits until the oldest slot is a minute old', async () => {
+  const ctx = await limiterCtx({ LLM_REQUESTS_PER_MINUTE: '3' })
+  await fillWindow(ctx.db, 3, 59_500) // full, and the slots free up in about half a second
+  const waited = await takeLlmSlot(ctx)
+  assert.ok(waited >= 400 && waited < 2000, `waited ${waited} ms`)
+})
+
+test('rate limit: two judges at once share one limit', async () => {
+  const ctx = await limiterCtx({ LLM_REQUESTS_PER_MINUTE: '2' })
+  await fillWindow(ctx.db, 1, 59_600) // one slot left now, the other frees up in about 0.4 s
+  const waits = await Promise.all([takeLlmSlot(ctx), takeLlmSlot(ctx)])
+  waits.sort((a, b) => a - b)
+  assert.equal(waits[0], 0) // one takes the free slot
+  assert.ok(waits[1] >= 300, `second waited ${waits[1]} ms`) // the other has to wait
+})
+
+test('rate limit: 0 means unlimited and records nothing; the default is 20', async () => {
+  const off = await limiterCtx({ LLM_REQUESTS_PER_MINUTE: '0' })
+  await fillWindow(off.db, 50, 1000)
+  assert.equal(await takeLlmSlot(off), 0)
+  assert.equal((await off.db.all('SELECT count(*) AS n FROM llm_calls'))[0].n, 50)
+
+  const byDefault = await limiterCtx({})
+  await fillWindow(byDefault.db, 19, 1000)
+  assert.equal(await takeLlmSlot(byDefault), 0) // the 20th call still fits
+})
+
+test('rate limit: the judge takes a slot for every call', async () => {
+  const llm = await fakeLlm([{ content: '{"score": 0.9}' }, { content: '{"score": 0.1}' }])
+  const ctx = await limiterCtx(llm.env)
+  ctx.env.LLM_REQUESTS_PER_MINUTE = '5'
+  assert.deepEqual(await judge(ctx, 'g', ['a', 'b']), [0.9, 0.1])
+  assert.equal((await ctx.db.all('SELECT count(*) AS n FROM llm_calls'))[0].n, 2)
+  llm.close()
+})

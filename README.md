@@ -100,6 +100,7 @@ Everything is an environment variable. `.env.example` lists them all.
 | `API_KEY` | Required. Clients send it as `Authorization: Bearer ...` |
 | `LLM_API_KEY`, `LLM_BASE_URL`, `LLM_MODEL` | Judge over an OpenAI-compatible API |
 | `LLM_COMMAND` | Judge through a local command instead (Node only) |
+| `LLM_REQUESTS_PER_MINUTE` | Most judge calls per minute, shared by every process. Default 20, `0` for no limit |
 | `TAVILY_API_KEY` | Search through Tavily |
 | `SEARXNG_URL` | Search through your own SearXNG. Wins if both are set |
 | `BROWSER_WS_URL` | CDP websocket of a browser, for JavaScript-rendered pages |
@@ -145,7 +146,11 @@ LLM_COMMAND="claude -p"
 
 The same idea should work with `codex exec` and `opencode run`, or with a script of your own that prints `{"score": 0.8}`.
 
-On rate limits (HTTP 429) the server waits for the `Retry-After` the provider asks for, up to 30 seconds, twice. If the limit holds, it stops judging for that run and the remaining candidates are picked up by the next one.
+Judge calls are limited to `LLM_REQUESTS_PER_MINUTE` (default 20, OpenRouter's limit for free models). The count is kept in the database, so all server processes and Cloudflare invocations share it; a call over the limit waits until a slot frees up. Set it to `0` when your key has no limit.
+
+If the provider still answers 429, the server waits for the `Retry-After` it asks for, up to 30 seconds, twice. If the limit holds, it stops judging for that run and the remaining candidates are picked up by the next one.
+
+OpenRouter's free models also have a daily cap: 50 requests a day until you have bought 10 credits, then 1,000. Every candidate costs one call, so a busy search monitor can use up 50 in its first run or two, after which runs fail with `judge_failed` until the next day.
 
 ### Using a chat subscription instead of an API key
 
