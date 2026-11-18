@@ -5,9 +5,9 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 COPY src ./src
 
-# the sqlite file lives on a volume so it survives container restarts
+# mount a volume at /data so the sqlite file survives restarts. No VOLUME line: Railway
+# refuses Dockerfiles that have one
 RUN mkdir /data && chown node:node /data
-VOLUME /data
 ENV DB_PATH=/data/monitor.db PORT=8787
 
 USER node
