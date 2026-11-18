@@ -84,6 +84,11 @@ export async function search(env, target, window) {
   }))
 }
 
+// newest first, so findings arrive in the order they were published; undated results go last
+export function sortNewestFirst(results) {
+  return results.sort((a, b) => (Date.parse(b.date) || 0) - (Date.parse(a.date) || 0))
+}
+
 export function applyFilters(results, filters, windowFrom) {
   const kept = []
   for (const result of results) {
@@ -115,6 +120,7 @@ export async function runSearch(ctx, monitor, run) {
   }
   const fresh = applyFilters(results, target.filters, Date.parse(run.window.from))
   if (fresh.length === 0) return
+  sortNewestFirst(fresh)
 
   const marks = fresh.map(() => '?').join(',')
   const seenRows = await db.all(

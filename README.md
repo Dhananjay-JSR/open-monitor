@@ -169,6 +169,8 @@ Search monitors need one of:
 
 Each run fetches up to `max_results` results, applies `include_domains` and `exclude_domains`, drops URLs this monitor has already judged, and sends the rest to the judge. A URL is judged once: rejected results do not come back, even if you change the goal later.
 
+A new monitor's first run looks back over the past 7 days. Every run after that covers the time since the one before, so it follows the schedule. Findings are ordered newest first.
+
 ## Pages that need JavaScript
 
 Page monitors fetch each URL with a plain HTTP request, which is enough for server-rendered pages. For pages that build their content in the browser, set `BROWSER_WS_URL` to the CDP websocket of a headless browser. The server then loads each page in it and reads the HTML after scripts have run.

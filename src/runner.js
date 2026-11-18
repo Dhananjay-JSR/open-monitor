@@ -1,7 +1,7 @@
 // Background work: the scheduler tick and everything that happens during a run.
 import { iso, now, runError } from './util.js'
 import { newId, idAt } from './crypto.js'
-import { nextRun, scheduleNext } from './schedule.js'
+import { scheduleNext } from './schedule.js'
 import * as store from './store.js'
 import { judgeConfigured } from './judge.js'
 import { runSearch } from './search-monitor.js'
@@ -109,13 +109,13 @@ async function deleteOldRuns(ctx) {
 }
 
 // The window is (from, to]: from where the monitor is covered till, to when this run starts.
-// The first one reaches back one schedule period before the monitor was created (max 7 days).
+// The first run reaches back 7 days before the monitor was created, so a new monitor starts
+// with the past week; after that each run covers the time since the one before.
+const FIRST_RUN_LOOKBACK_MS = 7 * DAY_MS
+
 function runWindow(monitor, startedMs) {
   if (monitor.covered_till) return { from: monitor.covered_till, to: iso(startedMs) }
-  const first = nextRun(monitor.schedule, startedMs)
-  const period = nextRun(monitor.schedule, first) - first
-  const lookback = Math.min(period, 7 * DAY_MS)
-  return { from: iso(Date.parse(monitor.created_at) - lookback), to: iso(startedMs) }
+  return { from: iso(Date.parse(monitor.created_at) - FIRST_RUN_LOOKBACK_MS), to: iso(startedMs) }
 }
 
 async function execute(ctx, run) {

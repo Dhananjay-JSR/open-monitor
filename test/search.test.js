@@ -44,7 +44,7 @@ test('tavily search monitor', async () => {
   assert.equal(sent.headers.authorization, 'Bearer tvly-test')
   assert.equal(sent.json.query, 'ai infrastructure funding')
   assert.equal(sent.json.max_results, 10)
-  assert.equal(sent.json.time_range, 'day') // daily schedule
+  assert.equal(sent.json.time_range, 'week') // a first run looks back 7 days
   assert.deepEqual(sent.json.exclude_domains, ['example.net'])
   assert.equal(sent.json.include_published_date, true)
 
@@ -136,4 +136,26 @@ test('no LLM configured fails the run', async () => {
   const run = await runAndWait(id)
   assert.equal(run.status, 'failed')
   assert.equal(run.error.code, 'judge_failed')
+})
+
+test('a first run looks back 7 days, and findings come newest first', async () => {
+  const day = 24 * 60 * 60 * 1000
+  const at = (daysAgo) => new Date(Date.now() - daysAgo * day).toISOString()
+  const searx = await fakeServer(() => ({
+    body: {
+      results: [
+        { title: 'Older', url: 'https://a.example.com/older', content: 'KEEP', publishedDate: at(5) },
+        { title: 'Undated', url: 'https://a.example.com/undated', content: 'KEEP' },
+        { title: 'Newest', url: 'https://a.example.com/newest', content: 'KEEP', publishedDate: at(1) },
+        { title: 'Too old', url: 'https://a.example.com/too-old', content: 'KEEP', publishedDate: at(9) },
+      ],
+    },
+  }))
+  const { call, runAndWait } = await makeApp({ SEARXNG_URL: searx.url, TAVILY_API_KEY: 'unused' })
+  // a 15 minute schedule still starts with the past week
+  const id = await createMonitor(call, { schedule: { type: 'interval', interval: '15m' } })
+  const run = await runAndWait(id)
+  assert.equal(Date.parse(run.window.to) - Date.parse(run.window.from) >= 7 * day, true)
+  assert.deepEqual(run.changes.map((c) => c.title), ['Newest', 'Older', 'Undated'])
+  searx.close()
 })
