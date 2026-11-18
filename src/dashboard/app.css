@@ -302,12 +302,9 @@ textarea.input { min-height: 80px; resize: vertical; }
   .ring .fg, .ring path { animation: none; stroke-dashoffset: 0; }
   .runlog .now .pip { animation: none; }
 }
-/* demo mode: the same screens, plus these elements */
+/* the optional top strip, read-only fields, and the webhook test in setup */
 .topstrip { display: flex; justify-content: center; gap: 8px; padding: 8px 16px; font-size: 12px; color: var(--color-text-2); background: var(--color-raised); border-bottom: 1px solid var(--color-line); }
 .topstrip b { font-weight: 500; color: var(--color-accent); }
-.limits { list-style: none; margin: 0 0 32px; padding: 0; display: grid; gap: 12px; }
-.limits li { display: flex; gap: 12px; align-items: baseline; color: var(--color-text-2); }
-.limits b { min-width: 56px; font-weight: 500; color: var(--color-text); font-variant-numeric: tabular-nums; }
 .input[readonly], .presets button:disabled { background: var(--color-raised); color: var(--color-text-2); cursor: default; }
 .presets button:disabled[aria-pressed="false"] { opacity: 0.5; }
 .hook-row { display: flex; gap: 8px; }

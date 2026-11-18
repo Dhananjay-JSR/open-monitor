@@ -21,7 +21,7 @@ const state = {
 }
 let refreshTimer = null
 
-// Add-ons (like the hosted demo) fill these in. All optional.
+// Add-ons fill these in. All optional.
 //   strip()               text or a node, shown as a thin bar above every screen
 //   entry()               a node that replaces the sign-in form
 //   lockedSetup()         a monitor id: first-run setup then follows that monitor and only the webhook can be set
@@ -1022,7 +1022,7 @@ function signInForm() {
     button.setAttribute('aria-busy', 'true')
     try {
       const result = await api('POST', '/auth/login', { username: username.value, password: password.value })
-      // add-ons can keep something from the login response, like the demo's visitor token
+      // add-ons can keep something from the login response
       slots.onLogin?.(result)
       await boot()
     } catch (e) {
