@@ -2,6 +2,7 @@
 // Everything that comes from the API (titles, snippets, diffs) is inserted as text, never as html.
 
 const DAY_MS = 24 * 60 * 60 * 1000
+const REPO_URL = 'https://github.com/Dhananjay-JSR/open-monitor'
 const SVG_NS = 'http://www.w3.org/2000/svg'
 const app = document.getElementById('app')
 
@@ -853,8 +854,6 @@ function drawer() {
 
 // ---- screens: sign in ----
 
-const REPO_URL = 'https://github.com/Dhananjay-JSR/open-monitor'
-
 // pictures for the sign-in page; examples of what a finding looks like, not anyone's data
 const at = (hour, minute) => new Date().setHours(hour, minute, 0, 0)
 const SAMPLES = [
@@ -939,7 +938,7 @@ function signInScreen() {
 
 const TEMPLATES = [
   { id: 'funding', name: 'Funding news', blurb: 'New rounds in a market you follow', kind: 'search', what: 'AI infrastructure startup raises funding', goal: 'New funding rounds for companies building GPU cloud, AI chips or inference infrastructure', preset: '1d' },
-  { id: 'changelog', name: 'A changelog', blurb: 'Breaking changes on a page you depend on', kind: 'page', what: '', goal: 'Breaking changes or removals in the API', preset: '1h' },
+  { id: 'changelog', name: 'A changelog', blurb: 'New releases on a page you depend on', kind: 'page', what: REPO_URL + '/releases', goal: 'A new release, or a breaking change in one', preset: '1d' },
   { id: 'models', name: 'Model releases', blurb: 'Open-weight models as they ship', kind: 'search', what: 'open weight LLM released model card', goal: 'A new open-weight language model with a model card or download link', preset: '1d' },
   { id: 'custom', name: 'Something else', blurb: 'Start from an empty monitor', kind: 'search', what: '', goal: '', preset: '1d' },
 ]
@@ -981,8 +980,10 @@ function readSetupFields() {
 }
 
 function pickTemplate(t) {
-  readSetupFields()
   Object.assign(state.setup, { tpl: t.id, kind: t.kind, what: t.what, goal: t.goal, preset: t.preset })
+  // the redraw reads the fields back in, so they have to hold the new template's values first
+  const field = document.getElementById('s-what')
+  if (field) field.value = t.what
   render()
 }
 
