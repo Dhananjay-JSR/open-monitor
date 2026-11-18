@@ -907,7 +907,7 @@ function signInScreen() {
         'div',
         { class: 'auth-form' },
         h('div', { class: 'brand' }, brand()),
-        h('div', { class: 'auth-center' }, h('a', { class: 'repo-link', href: REPO_URL, target: '_blank', rel: 'noopener noreferrer' }, icon('github'), 'Open source on GitHub'), slots.entry?.() ?? signInForm()),
+        h('div', { class: 'auth-center' }, h('a', { class: 'repo-link', href: REPO_URL, target: '_blank', rel: 'noopener noreferrer', title: 'GitHub', 'aria-label': 'Open Monitor on GitHub' }, icon('github')), slots.entry?.() ?? signInForm()),
       ),
       h(
         'div',
