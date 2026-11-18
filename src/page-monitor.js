@@ -10,8 +10,8 @@ import { hostOf } from './telemetry.js'
 
 const USER_AGENT = 'Mozilla/5.0 (compatible; open-monitor/0.1)'
 const MAX_REDIRECTS = 5
-const MAX_TEXT_CHARS = 200_000
-const DEFAULT_GOAL = 'Meaningful content changes. Ignore timestamps, counters, ads and layout noise.'
+export const MAX_TEXT_CHARS = 200_000
+export const DEFAULT_GOAL = 'Meaningful content changes. Ignore timestamps, counters, ads and layout noise.'
 
 function pageError(code, message, statusCode) {
   const e = new Error(message)
@@ -29,7 +29,7 @@ function browserHeaders(env) {
   }
 }
 
-async function fetchHtml(env, url) {
+export async function fetchHtml(env, url) {
   if (env.BROWSER_WS_URL) {
     // a real browser, so javascript-rendered pages work
     try {

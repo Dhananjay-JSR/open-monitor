@@ -4,7 +4,7 @@ import { sha256 } from './crypto.js'
 import { judge } from './judge.js'
 
 const DAY_MS = 24 * 60 * 60 * 1000
-const DEFAULT_GOAL = 'Results that are relevant to the search query and substantive.'
+export const DEFAULT_GOAL = 'Results that are relevant to the search query and substantive.'
 
 function hostname(url) {
   try {
@@ -54,7 +54,7 @@ async function tavily(env, target, days) {
 }
 
 // SearXNG wins if both are configured. Both return { results: [...] } with slightly different date fields.
-async function search(env, target, window) {
+export async function search(env, target, window) {
   const days = (Date.parse(window.to) - Date.parse(window.from)) / DAY_MS
 
   let res
@@ -84,7 +84,7 @@ async function search(env, target, window) {
   }))
 }
 
-function applyFilters(results, filters, windowFrom) {
+export function applyFilters(results, filters, windowFrom) {
   const kept = []
   for (const result of results) {
     const host = hostname(result.url)
