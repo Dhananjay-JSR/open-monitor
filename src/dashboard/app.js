@@ -71,6 +71,7 @@ const ICONS = {
   close: [['path', { d: 'M18 6 6 18M6 6l12 12' }]],
   eye: [['path', { d: 'M2.06 12.35a1 1 0 0 1 0-.7 10.75 10.75 0 0 1 19.88 0 1 1 0 0 1 0 .7 10.75 10.75 0 0 1-19.88 0' }], ['circle', { cx: 12, cy: 12, r: 3 }]],
   eyeOff: [['path', { d: 'M10.73 5.08A10.43 10.43 0 0 1 12 5c4.53 0 8.36 2.97 9.94 7a10.8 10.8 0 0 1-1.44 2.49M14.08 14.16a3 3 0 0 1-4.24-4.24M17.48 17.5A10.75 10.75 0 0 1 2.06 12a10.8 10.8 0 0 1 4.45-5.5M2 2l20 20' }]],
+  code: [['path', { d: 'm16 18 6-6-6-6M8 6l-6 6 6 6' }]],
   github: [['path', { d: 'M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.4 5.4 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4' }], ['path', { d: 'M9 18c-4.51 2-5-2-7-2' }]],
 }
 
@@ -278,7 +279,7 @@ async function loadAll() {
       applyHash()
       routed = true
     }
-    if (state.view !== 'all' && !state.monitors.some((m) => m.id === state.view)) state.view = 'all'
+    if (state.view !== 'all' && state.view !== 'api' && !state.monitors.some((m) => m.id === state.view)) state.view = 'all'
     if (!state.setup && setupWanted()) startSetup()
   } catch (e) {
     if (e.status === 401) state.session = null
@@ -312,7 +313,7 @@ async function act(fn, done) {
 let routed = false // the hash is read once the monitors are loaded, then kept in step with the screen
 
 function hashFor() {
-  const page = state.view === 'all' ? '' : `monitors/${state.view}`
+  const page = state.view === 'all' ? '' : state.view === 'api' ? 'api' : `monitors/${state.view}`
   const open = state.drawer ? (state.drawer.edit ? 'edit' : 'new') : ''
   return '#/' + [page, open].filter(Boolean).join('/')
 }
@@ -322,7 +323,7 @@ function applyHash() {
   const id = parts[0] === 'monitors' ? parts[1] : null
   const action = id ? parts[2] : parts[0]
   const monitor = state.monitors.find((m) => m.id === id)
-  state.view = monitor ? monitor.id : 'all'
+  state.view = monitor ? monitor.id : parts[0] === 'api' && isOwner() ? 'api' : 'all'
   if (action === 'edit' && monitor && isOwner()) state.drawer = state.drawer?.edit === monitor.id ? state.drawer : drawerFor(monitor)
   else if (action === 'new' && isOwner()) state.drawer = state.drawer && !state.drawer.edit ? state.drawer : drawerFor()
   else state.drawer = null
@@ -622,7 +623,12 @@ function sidebar() {
       state.monitors.map((m) => navItem(m.id, m.name, monitorIcon(m), todayCount([m]))),
       isOwner() && h('button', { class: 'nav new-btn', title: 'New monitor', onclick: openDrawer }, h('span', { class: 'slot' }, icon('plus')), h('span', { class: 'grow', text: 'New monitor' })),
     ),
-    h('a', { class: 'nav repo-nav', href: REPO_URL, target: '_blank', rel: 'noopener noreferrer', title: 'GitHub' }, h('span', { class: 'slot' }, icon('github')), h('span', { class: 'grow', text: 'GitHub' })),
+    h(
+      'div',
+      { class: 'nav-list side-bottom' },
+      isOwner() && h('button', { class: 'nav api-nav', 'aria-current': String(state.view === 'api'), title: 'API', onclick: () => go('api') }, h('span', { class: 'slot' }, icon('code')), h('span', { class: 'grow', text: 'API' })),
+      h('a', { class: 'nav repo-nav', href: REPO_URL, target: '_blank', rel: 'noopener noreferrer', title: 'GitHub' }, h('span', { class: 'slot' }, icon('github')), h('span', { class: 'grow', text: 'GitHub' })),
+    ),
     // the footer mirrors the header: who is signed in, and the sign-out button where the toggle sits
     h(
       'div',
@@ -649,7 +655,7 @@ function bottomBar() {
       item(slots.signOutLabel ?? 'Sign out', 'out', false, signOut),
     ),
     h('div', { class: 'sheet-scrim' + (state.sheet ? ' open' : ''), onclick: closeSheet }),
-    h('section', { class: 'sheet' + (state.sheet ? ' open' : ''), 'aria-label': 'Monitors' }, h('div', { class: 'grip' }), h('h2', { text: 'Monitors' }), h('div', { class: 'nav-list' }, state.monitors.map((m) => navItem(m.id, m.name, monitorIcon(m), todayCount([m]))))),
+    h('section', { class: 'sheet' + (state.sheet ? ' open' : ''), 'aria-label': 'Monitors' }, h('div', { class: 'grip' }), h('h2', { text: 'Monitors' }), h('div', { class: 'nav-list' }, state.monitors.map((m) => navItem(m.id, m.name, monitorIcon(m), todayCount([m]))), isOwner() && navItem('api', 'API', icon('code')))),
   ]
 }
 
@@ -691,6 +697,7 @@ function monitorPage(monitor) {
     actions.push(
       monitor.status === 'active' ? h('button', { class: 'btn', text: 'Pause', onclick: call('/pause') }) : h('button', { class: 'btn', text: 'Resume', onclick: call('/resume') }),
       h('button', { class: 'btn ghost', text: 'Edit', onclick: () => openDrawer(monitor) }),
+      h('button', { class: 'btn ghost', text: 'Copy as curl', onclick: () => copyText(createCurl(monitor), 'Copied the curl command that creates this monitor') }),
       monitor.webhook && h('button', { class: 'btn ghost', text: 'Test webhook', onclick: testWebhook }),
       h('span', { class: 'spacer' }),
       h('button', {
@@ -729,13 +736,118 @@ function monitorPage(monitor) {
   ]
 }
 
+// ---- API page: the same things over HTTP, for scripts and agents ----
+
+const KEY_VAR = '$OPEN_MONITOR_API_KEY'
+
+function copyText(text, done = 'Copied') {
+  navigator.clipboard
+    ?.writeText(text)
+    .then(() => toast(done))
+    .catch(() => toast('Copying is blocked here. Select the text and copy it instead', { kind: 'error' }))
+}
+
+function curl(method, path, body) {
+  const lines = [`curl${method === 'GET' ? '' : ' -X ' + method} "${location.origin}${path}"`, `  -H "Authorization: Bearer ${KEY_VAR}"`]
+  if (body) lines.push('  -H "Content-Type: application/json"', `  -d '${JSON.stringify(body, null, 2).replace(/'/g, "'\\''").replace(/\n/g, '\n  ')}'`)
+  return lines.join(' \\\n')
+}
+
+// the request that would create this monitor again, e.g. on another server
+function createCurl(monitor) {
+  const body = { name: monitor.name, goal: monitor.goal, targets: monitor.targets, schedule: monitor.schedule }
+  if (monitor.webhook) body.webhook = { url: monitor.webhook.url, events: monitor.webhook.events }
+  return curl('POST', '/v1/monitors', body)
+}
+
+function agentsMarkdown() {
+  const base = location.origin
+  return `## Open Monitor
+
+Open Monitor watches web searches and pages on a schedule and reports findings that match a goal.
+
+- Base URL: ${base}
+- Auth: send \`Authorization: Bearer ${KEY_VAR}\` (the server's API_KEY) with every /v1 request.
+- API description, OpenAPI 3.1, no key needed: ${base}/openapi.json
+
+Common tasks:
+
+- Create a monitor: \`POST /v1/monitors\` with \`name\`, \`targets\` (one \`{"type": "search", "query": "..."}\` or up to 10 \`{"type": "page", "url": "..."}\`), \`goal\`, \`schedule\` (\`{"type": "interval", "interval": "1d"}\`) and optionally \`webhook: {"url": "..."}\`. The response includes \`webhook.secret\` once, store it.
+- Read findings: \`GET /v1/monitors/{id}/runs\`. Each run's \`changes\` are the kept findings.
+- Run now: \`POST /v1/monitors/{id}/run\`, then poll \`GET /v1/monitors/{id}/runs/{run_id}\` until \`status\` is \`succeeded\` or \`failed\`.
+- Change or remove the webhook: \`PATCH /v1/monitors/{id}\` with \`{"webhook": {"url": "..."}}\` or \`{"webhook": null}\`.
+
+Webhook deliveries follow Standard Webhooks. Before trusting one, check \`webhook-signature\`: it is \`v1,\` plus the base64 HMAC-SHA256 of \`{webhook-id}.{webhook-timestamp}.{raw body}\`, keyed with the base64-decoded part of the secret after \`whsec_\`. Event types: monitor.changes.detected, monitor.run.completed, monitor.paused.
+`
+}
+
+const VERIFY_SNIPPET = `import { createHmac, timingSafeEqual } from 'node:crypto'
+
+// headers of the delivery, the raw body as a string, and the monitor's whsec_ secret
+export function verify(headers, body, secret) {
+  const key = Buffer.from(secret.slice('whsec_'.length), 'base64')
+  const signed = \`\${headers['webhook-id']}.\${headers['webhook-timestamp']}.\${body}\`
+  const expected = Buffer.from(createHmac('sha256', key).update(signed).digest('base64'))
+  // during a secret rotation two signatures arrive, separated by a space
+  return headers['webhook-signature'].split(' ').some((entry) => {
+    const given = Buffer.from(entry.split(',')[1] ?? '')
+    return given.length === expected.length && timingSafeEqual(given, expected)
+  })
+}`
+
+function codeCard(title, code) {
+  return h(
+    'section',
+    { class: 'code-card' },
+    h('div', { class: 'code-head' }, h('h3', { text: title }), h('button', { class: 'btn ghost', type: 'button', text: 'Copy', onclick: () => copyText(code) })),
+    h('pre', { class: 'code', tabindex: 0 }, h('code', { text: code })),
+  )
+}
+
+function apiPage() {
+  const first = state.monitors[0]
+  const exampleId = first?.id ?? 'MONITOR_ID'
+  const example = {
+    name: 'Open Monitor releases',
+    goal: 'A new release, or a breaking change in one',
+    targets: [{ type: 'page', url: REPO_URL + '/releases' }],
+    schedule: { type: 'interval', interval: '1d' },
+    webhook: { url: 'https://webhook.site/your-id' },
+  }
+  return [
+    h(
+      'div',
+      { class: 'mhead' },
+      h('h2', { text: 'API' }),
+      h('p', { class: 'goal', text: 'Everything on this dashboard works over HTTP too, for scripts and AI agents.' }),
+      h(
+        'dl',
+        { class: 'facts' },
+        h('div', {}, h('dt', { text: 'Base URL' }), h('dd', { class: 'mono', text: location.origin })),
+        h('div', {}, h('dt', { text: 'Auth' }), h('dd', { class: 'mono', text: `Bearer ${KEY_VAR}` })),
+        h('div', {}, h('dt', { text: 'Spec' }), h('dd', {}, h('a', { class: 'link', href: '/openapi.json', target: '_blank', rel: 'noopener noreferrer', text: '/openapi.json' }))),
+      ),
+      h('p', { class: 'api-note', text: `${KEY_VAR} stands for the API_KEY in your server's .env. It is never sent to this page.` }),
+      h('div', { class: 'actions' }, h('button', { class: 'btn primary', text: 'Copy for AGENTS.md', onclick: () => copyText(agentsMarkdown(), 'Copied. Paste it into your AGENTS.md') }), h('a', { class: 'btn ghost', href: '/openapi.json', target: '_blank', rel: 'noopener noreferrer', text: 'Open the spec' })),
+    ),
+    h(
+      'div',
+      { class: 'feed' },
+      codeCard('Create a monitor', curl('POST', '/v1/monitors', example)),
+      codeCard('Read findings', curl('GET', `/v1/monitors/${exampleId}/runs?limit=5`)),
+      codeCard('Run now', curl('POST', `/v1/monitors/${exampleId}/run`)),
+      codeCard('Verify a webhook delivery (Node)', VERIFY_SNIPPET),
+    ),
+  ]
+}
+
 function dashboard() {
   const monitor = state.monitors.find((m) => m.id === state.view)
   return h(
     'div',
     { class: 'app' + (state.sideOpen ? '' : ' collapsed') },
     sidebar(),
-    h('main', { class: 'main' }, h('div', { class: 'top' }, h('h1', { text: monitor ? monitor.name : 'All findings' })), h('div', { class: 'page' }, monitor ? monitorPage(monitor) : overviewPage())),
+    h('main', { class: 'main' }, h('div', { class: 'top' }, h('h1', { text: monitor ? monitor.name : state.view === 'api' ? 'API' : 'All findings' })), h('div', { class: 'page' }, monitor ? monitorPage(monitor) : state.view === 'api' ? apiPage() : overviewPage())),
     bottomBar(),
     drawer(),
   )

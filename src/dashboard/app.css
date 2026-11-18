@@ -27,7 +27,9 @@ button { cursor: pointer; }
 .dot[data-s="paused"] { background: transparent; box-shadow: inset 0 0 0 1.5px var(--color-text-3); }
 .new-btn { margin-top: 8px; }
 /* the repository link and the footer sit at the bottom of the sidebar */
-.repo-nav { margin-top: auto; text-decoration: none; }
+/* API and GitHub sit at the bottom of the sidebar, above the footer */
+.side-bottom { margin-top: auto; }
+.repo-nav { text-decoration: none; }
 .side-foot { margin-top: 4px; display: flex; align-items: center; gap: 10px; height: 32px; padding-left: 12px; }
 .side-foot .user { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 13px; color: var(--color-text-2); }
 .avatar { width: 16px; height: 16px; border-radius: 50%; display: grid; place-items: center; background: var(--color-raised); box-shadow: inset 0 0 0 1px var(--color-line-2); font-size: 9px; font-weight: 600; color: var(--color-text); }
@@ -424,3 +426,12 @@ textarea.input { min-height: 80px; resize: vertical; }
 .pw-wrap .input { padding-right: 44px; }
 .pw-reveal { position: absolute; top: 50%; right: 4px; transform: translateY(-50%); width: 32px; height: 32px; display: grid; place-items: center; border: 0; border-radius: 6px; background: transparent; color: var(--color-text-3); transition: background-color 120ms var(--ease), color 120ms var(--ease); }
 .pw-reveal:hover { background: var(--color-raised); color: var(--color-text); }
+
+/* API page */
+.api-note { margin: -8px 0 24px; font-size: 13px; color: var(--color-text-3); }
+.code-card { padding: 16px 20px 20px; border-radius: 16px; background: var(--color-card); border: 1px solid var(--color-line); }
+.code-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.code-head h3 { margin: 0; font-size: 14px; font-weight: 500; }
+.code-head .btn { height: 28px; }
+.code { margin: 0; padding: 16px; border-radius: 8px; background: var(--color-raised); font: 12px/1.6 var(--mono); color: var(--color-text-2); overflow-x: auto; }
+.code code { font: inherit; }

@@ -4,6 +4,8 @@ A self-hosted server that speaks [Perplexity's Monitor API](https://docs.perplex
 
 Point an existing Monitor API client at your own base URL and it keeps working. You bring the search provider and the LLM. The only npm dependencies are the official OpenTelemetry packages, for telemetry.
 
+The full API is described in OpenAPI 3.1 at `/openapi.json` on your server. It needs no key, so tools and agents can read it first.
+
 ```bash
 curl -X POST http://localhost:8787/v1/monitors \
   -H "Authorization: Bearer $API_KEY" \
@@ -208,7 +210,9 @@ Also reject timestamps more than five minutes old, and dedupe on `webhook-id`.
 
 Set `DASHBOARD_USER`, `DASHBOARD_PASSWORD` and `SESSION_SECRET`, then open the server's root URL. Without all three there is no dashboard and `/` returns 404.
 
-It shows one lane per monitor with its runs over the last 24 hours, and a log of every run with the kept changes, diffs and webhook deliveries. You can create, run, pause, resume and delete monitors from it.
+It shows a feed of findings (search results, and page changes as before and after lines), findings per day, and failed runs or failing webhooks under "Needs attention". You can create, edit, run, pause, resume and delete monitors, and change or test their webhook. With no monitors yet, it opens a three-step setup that creates one and runs it.
+
+The API page has the base URL, curl examples, and a "Copy for AGENTS.md" button with a short section an AI agent can follow to use the API.
 
 Logins are server-side sessions that last 12 hours. Five wrong passwords lock that username and IP for 15 minutes. Serve it over HTTPS: the session cookie is only marked `Secure` when the request arrived over HTTPS (or with `X-Forwarded-Proto: https`).
 
