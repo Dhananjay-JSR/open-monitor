@@ -15,7 +15,8 @@ test('the dashboard is one self-contained document', () => {
   })
 
   // nothing left that would need another request (the CSP would block it anyway)
-  assert.equal(/<link\b/.test(page), false)
+  // a data: link (the favicon) needs no request
+  assert.equal(/<link\b(?![^>]*href="data:)/.test(page), false)
   assert.equal(/<script[^>]+src=/.test(page), false)
   assert.equal(page.includes("url('fonts/"), false)
   assert.ok(page.includes('data:font/woff2;base64,'))
