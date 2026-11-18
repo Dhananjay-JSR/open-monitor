@@ -68,6 +68,7 @@ const ICONS = {
   play: [['path', { d: 'M6 3v18l15-9z' }]],
   check: [['path', { d: 'M20 6 9 17l-5-5' }]],
   close: [['path', { d: 'M18 6 6 18M6 6l12 12' }]],
+  github: [['path', { d: 'M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.4 5.4 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4' }], ['path', { d: 'M9 18c-4.51 2-5-2-7-2' }]],
 }
 
 function icon(name) {
@@ -850,6 +851,8 @@ function drawer() {
 
 // ---- screens: sign in ----
 
+const REPO_URL = 'https://github.com/Dhananjay-JSR/open-monitor'
+
 // pictures for the sign-in page; examples of what a finding looks like, not anyone's data
 const at = (hour, minute) => new Date().setHours(hour, minute, 0, 0)
 const SAMPLES = [
@@ -900,7 +903,12 @@ function signInScreen() {
     h(
       'div',
       { class: 'auth' },
-      h('div', { class: 'auth-form' }, h('div', { class: 'brand' }, brand()), slots.entry?.() ?? signInForm()),
+      h(
+        'div',
+        { class: 'auth-form' },
+        h('div', { class: 'brand' }, brand()),
+        h('div', { class: 'auth-center' }, h('a', { class: 'repo-link', href: REPO_URL, target: '_blank', rel: 'noopener noreferrer' }, icon('github'), 'Open source on GitHub'), slots.entry?.() ?? signInForm()),
+      ),
       h(
         'div',
         { class: 'auth-side', 'aria-hidden': 'true', inert: true },

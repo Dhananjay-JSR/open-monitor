@@ -410,3 +410,9 @@ textarea.input { min-height: 80px; resize: vertical; }
 @media (prefers-reduced-motion: reduce) {
   .toast, .toast.out { animation: none; }
 }
+
+/* sign-in: the repository link sits above the form, in the same centred column */
+.auth-center { margin: auto; width: 100%; max-width: 360px; padding: 48px 0; display: grid; gap: 24px; }
+.auth-center .auth-body { margin: 0; padding: 0; max-width: none; }
+.repo-link { justify-self: start; display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--color-line-2); color: var(--color-text-2); font-size: 13px; font-weight: 500; text-decoration: none; transition: background-color 120ms var(--ease), color 120ms var(--ease); }
+.repo-link:hover { background: var(--color-raised); color: var(--color-text); }
