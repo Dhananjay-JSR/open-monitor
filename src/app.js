@@ -1,4 +1,5 @@
 // HTTP API. `ctx` is { env, db } and is built by the entrypoint (node.js or worker.js).
+import { openapi } from './openapi.js'
 import { iso, now } from './util.js'
 import { newId, newWebhookSecret, sha256, safeEqual } from './crypto.js'
 import { scheduleNext } from './schedule.js'
@@ -283,6 +284,12 @@ async function route(ctx, req, background) {
   const method = req.method
 
   if (path === '/health') return json(200, { ok: true })
+  // the API description is public, so tools and agents can read it before they have a key
+  if (path === '/openapi.json' && method === 'GET') {
+    return new Response(JSON.stringify(openapi(url.origin)), {
+      headers: { 'content-type': 'application/json', 'access-control-allow-origin': '*' },
+    })
+  }
 
   // add-on endpoints get first refusal, including over the /auth routes below
   const extra = await ctx.hooks?.routes?.(ctx, req)
