@@ -1203,7 +1203,10 @@ async function testHook() {
   render()
   try {
     const r = await slots.attachWebhook(url, s.locked)
-    s.test = r.delivered ? { ok: true, text: `Delivered, ${r.status_code} in ${r.duration_ms} ms`, secret: r.secret } : { ok: false, text: `Not delivered: ${r.status_code ? 'answered ' + r.status_code : r.error}` }
+    // the time and the reason are only shown when the add-on passes them on
+    const took = r.duration_ms === undefined ? '' : ` in ${r.duration_ms} ms`
+    const why = r.status_code ? `: answered ${r.status_code}` : r.error ? `: ${r.error}` : ''
+    s.test = r.delivered ? { ok: true, text: `Delivered, ${r.status_code}${took}`, secret: r.secret } : { ok: false, text: `Not delivered${why}` }
   } catch (e) {
     s.test = { ok: false, text: e.message }
   }
