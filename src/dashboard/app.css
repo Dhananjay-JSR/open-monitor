@@ -213,7 +213,9 @@ textarea.input { min-height: 80px; resize: vertical; }
    light that follows the pointer (--mx, --my); the others stay put */
 .deck-cards .card { transform: translate(calc(var(--x) + var(--px, 0px)), var(--py, 0px)) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)); transition: transform 500ms var(--ease); }
 /* follow the pointer closely while it is over the card, settle back slowly when it leaves */
-.deck-cards .card.near { transition: transform 120ms ease-out; will-change: transform; }
+.deck-cards .card.near { transition: transform 120ms ease-out; }
+/* a layer of their own all the time, so the glass isn't redrawn (with a flash) when hover ends */
+.deck-cards .card { will-change: transform; }
 .deck-cards .card::after { content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; background: radial-gradient(260px circle at var(--mx, 50%) var(--my, 0%), rgb(255 255 255 / 0.09), transparent 65%); opacity: var(--shine, 0); transition: opacity 300ms var(--ease); }
 @media (prefers-reduced-motion: reduce) {
   .deck-cards .card { transform: translateX(var(--x)); }

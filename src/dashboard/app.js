@@ -1083,8 +1083,12 @@ function setTilt(card, x, y, lit) {
   card.style.setProperty('--py', `${y * 6}px`)
   card.style.setProperty('--rx', `${-y * 6}deg`)
   card.style.setProperty('--ry', `${x * 8}deg`)
-  card.style.setProperty('--mx', `${(x + 1) * 50}%`)
-  card.style.setProperty('--my', `${(y + 1) * 50}%`)
+  // an unlit card keeps its light where it was, so it fades out in place instead of jumping
+  // to the middle (that jump showed as a bright flash on leaving)
+  if (lit) {
+    card.style.setProperty('--mx', `${(x + 1) * 50}%`)
+    card.style.setProperty('--my', `${(y + 1) * 50}%`)
+  }
   card.style.setProperty('--shine', lit ? '1' : '0')
 }
 
