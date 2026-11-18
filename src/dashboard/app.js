@@ -1290,7 +1290,8 @@ function setupScreen() {
     // a locked setup shows the same four templates as the main app, with the one that
     // matches the monitor being followed selected
     const cards = TEMPLATES.map((t) => ({ ...t, enabled: !locked }))
-    const selected = locked ? (TEMPLATES.find((t) => t.kind === s.kind) ?? TEMPLATES[0]).id : s.tpl
+    const match = TEMPLATES.find((t) => t.kind === s.kind && (t.what === s.what || t.goal === s.goal))
+    const selected = locked ? (match ?? TEMPLATES.find((t) => t.kind === s.kind) ?? TEMPLATES[0]).id : s.tpl
     const whatField =
       s.kind === 'page' && !locked
         ? h('textarea', { class: 'input', id: 's-what', placeholder: 'https://', text: s.what })
