@@ -1048,30 +1048,37 @@ function signInForm() {
 }
 
 // The example card under the pointer slides up to 10px across and 6px down toward it, tilts
-// up to 8 degrees, and a light follows the pointer across it.
-// The cards are inert decoration, so the pointer can't target them; their boxes are checked
-// instead, front card first where they overlap.
+// up to 8 degrees, and a light follows the pointer across it. The cards are inert decoration,
+// so the pointer can't target them: their resting boxes are checked instead, front card first
+// where they overlap. Resting, not current, so a card that moves can't slip out from under the
+// pointer and flicker. Updates are batched to one per frame.
+let tiltFrame = 0
+
 function parallax(event) {
-  const cards = [...(event.currentTarget.querySelector('.deck-cards')?.children ?? [])]
   if (event.pointerType === 'touch') return
-  const near = cards.findLast((card) => {
-    const box = card.getBoundingClientRect()
-    return event.clientX >= box.left && event.clientX <= box.right && event.clientY >= box.top && event.clientY <= box.bottom
-  })
-  for (const card of cards) {
-    let x = 0
-    let y = 0
-    if (card === near) {
-      const box = card.getBoundingClientRect()
-      x = ((event.clientX - box.left) / box.width - 0.5) * 2
-      y = ((event.clientY - box.top) / box.height - 0.5) * 2
+  const deck = event.currentTarget.querySelector('.deck-cards')
+  const { clientX, clientY } = event
+  cancelAnimationFrame(tiltFrame)
+  tiltFrame = requestAnimationFrame(() => {
+    if (!deck) return
+    const origin = deck.getBoundingClientRect()
+    const boxes = [...deck.children].map((card) => {
+      const shift = parseFloat(getComputedStyle(card).getPropertyValue('--x')) || 0
+      const left = origin.left + card.offsetLeft + shift
+      const top = origin.top + card.offsetTop
+      return { card, left, top, width: card.offsetWidth, height: card.offsetHeight }
+    })
+    const near = boxes.findLast((b) => clientX >= b.left && clientX <= b.left + b.width && clientY >= b.top && clientY <= b.top + b.height)
+    for (const b of boxes) {
+      if (b === near) setTilt(b.card, ((clientX - b.left) / b.width - 0.5) * 2, ((clientY - b.top) / b.height - 0.5) * 2, true)
+      else setTilt(b.card, 0, 0, false)
     }
-    setTilt(card, x, y, card === near)
-  }
+  })
 }
 
 // x and y run from -1 to 1 across the card; 0, 0 is at rest
 function setTilt(card, x, y, lit) {
+  card.classList.toggle('near', lit)
   card.style.setProperty('--px', `${x * 10}px`)
   card.style.setProperty('--py', `${y * 6}px`)
   card.style.setProperty('--rx', `${-y * 6}deg`)
@@ -1082,6 +1089,7 @@ function setTilt(card, x, y, lit) {
 }
 
 function resetParallax(event) {
+  cancelAnimationFrame(tiltFrame)
   for (const card of event.currentTarget.querySelectorAll('.deck-cards .card')) setTilt(card, 0, 0, false)
 }
 
