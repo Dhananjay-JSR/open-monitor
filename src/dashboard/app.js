@@ -26,6 +26,7 @@ let refreshTimer = null
 //   lockedSetup()         a monitor id: first-run setup then follows that monitor and only the webhook can be set
 //   attachWebhook(url, m) used by "Send test" in a locked setup, resolves to { delivered, status_code, duration_ms, error, secret }
 //   signOutLabel          text for the sign-out button
+//   api                   shows the API page to non-owners: { keyVar, note, examples({ curl, monitors }) -> [[title, code]], agents(keyVar) -> markdown }
 const slots = {}
 
 // ---- small helpers ----
@@ -112,6 +113,7 @@ const remember = {
 }
 
 const isOwner = () => state.session?.role === 'owner'
+const canSeeApi = () => isOwner() || Boolean(slots.api)
 const clock = (at) => new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
 const shortDate = (ms) => new Date(ms).toLocaleDateString([], { day: 'numeric', month: 'short' })
 const startOfDay = (ms) => new Date(new Date(ms).toDateString()).getTime()
@@ -323,7 +325,7 @@ function applyHash() {
   const id = parts[0] === 'monitors' ? parts[1] : null
   const action = id ? parts[2] : parts[0]
   const monitor = state.monitors.find((m) => m.id === id)
-  state.view = monitor ? monitor.id : parts[0] === 'api' && isOwner() ? 'api' : 'all'
+  state.view = monitor ? monitor.id : parts[0] === 'api' && canSeeApi() ? 'api' : 'all'
   if (action === 'edit' && monitor && isOwner()) state.drawer = state.drawer?.edit === monitor.id ? state.drawer : drawerFor(monitor)
   else if (action === 'new' && isOwner()) state.drawer = state.drawer && !state.drawer.edit ? state.drawer : drawerFor()
   else state.drawer = null
@@ -626,7 +628,7 @@ function sidebar() {
     h(
       'div',
       { class: 'nav-list side-bottom' },
-      isOwner() && h('button', { class: 'nav api-nav', 'aria-current': String(state.view === 'api'), title: 'API', onclick: () => go('api') }, h('span', { class: 'slot' }, icon('code')), h('span', { class: 'grow', text: 'API' })),
+      canSeeApi() && h('button', { class: 'nav api-nav', 'aria-current': String(state.view === 'api'), title: 'API', onclick: () => go('api') }, h('span', { class: 'slot' }, icon('code')), h('span', { class: 'grow', text: 'API' })),
       h('a', { class: 'nav repo-nav', href: REPO_URL, target: '_blank', rel: 'noopener noreferrer', title: 'GitHub' }, h('span', { class: 'slot' }, icon('github')), h('span', { class: 'grow', text: 'GitHub' })),
     ),
     // the footer mirrors the header: who is signed in, and the sign-out button where the toggle sits
@@ -655,7 +657,7 @@ function bottomBar() {
       item(slots.signOutLabel ?? 'Sign out', 'out', false, signOut),
     ),
     h('div', { class: 'sheet-scrim' + (state.sheet ? ' open' : ''), onclick: closeSheet }),
-    h('section', { class: 'sheet' + (state.sheet ? ' open' : ''), 'aria-label': 'Monitors' }, h('div', { class: 'grip' }), h('h2', { text: 'Monitors' }), h('div', { class: 'nav-list' }, state.monitors.map((m) => navItem(m.id, m.name, monitorIcon(m), todayCount([m]))), isOwner() && navItem('api', 'API', icon('code')))),
+    h('section', { class: 'sheet' + (state.sheet ? ' open' : ''), 'aria-label': 'Monitors' }, h('div', { class: 'grip' }), h('h2', { text: 'Monitors' }), h('div', { class: 'nav-list' }, state.monitors.map((m) => navItem(m.id, m.name, monitorIcon(m), todayCount([m]))), canSeeApi() && navItem('api', 'API', icon('code')))),
   ]
 }
 
@@ -747,8 +749,8 @@ function copyText(text, done = 'Copied') {
     .catch(() => toast('Copying is blocked here. Select the text and copy it instead', { kind: 'error' }))
 }
 
-function curl(method, path, body) {
-  const lines = [`curl${method === 'GET' ? '' : ' -X ' + method} "${location.origin}${path}"`, `  -H "Authorization: Bearer ${KEY_VAR}"`]
+function curl(method, path, body, keyVar = KEY_VAR) {
+  const lines = [`curl${method === 'GET' ? '' : ' -X ' + method} "${location.origin}${path}"`, `  -H "Authorization: Bearer ${keyVar}"`]
   if (body) lines.push('  -H "Content-Type: application/json"', `  -d '${JSON.stringify(body, null, 2).replace(/'/g, "'\\''").replace(/\n/g, '\n  ')}'`)
   return lines.join(' \\\n')
 }
@@ -760,14 +762,14 @@ function createCurl(monitor) {
   return curl('POST', '/v1/monitors', body)
 }
 
-function agentsMarkdown() {
+function agentsMarkdown(keyVar = KEY_VAR) {
   const base = location.origin
   return `## Open Monitor
 
 Open Monitor watches web searches and pages on a schedule and reports findings that match a goal.
 
 - Base URL: ${base}
-- Auth: send \`Authorization: Bearer ${KEY_VAR}\` (the server's API_KEY) with every /v1 request.
+- Auth: send \`Authorization: Bearer ${keyVar}\` with every /v1 request.
 - API description, OpenAPI 3.1, no key needed: ${base}/openapi.json
 
 Common tasks:
@@ -805,6 +807,9 @@ function codeCard(title, code) {
 }
 
 function apiPage() {
+  // owners use the server's API_KEY; an add-on can describe its own key and examples for everyone else
+  const custom = isOwner() ? null : slots.api
+  const keyVar = custom?.keyVar ?? KEY_VAR
   const first = state.monitors[0]
   const exampleId = first?.id ?? 'MONITOR_ID'
   const example = {
@@ -824,18 +829,22 @@ function apiPage() {
         'dl',
         { class: 'facts' },
         h('div', {}, h('dt', { text: 'Base URL' }), h('dd', { class: 'mono', text: location.origin })),
-        h('div', {}, h('dt', { text: 'Auth' }), h('dd', { class: 'mono', text: `Bearer ${KEY_VAR}` })),
+        h('div', {}, h('dt', { text: 'Auth' }), h('dd', { class: 'mono', text: `Bearer ${keyVar}` })),
         h('div', {}, h('dt', { text: 'Spec' }), h('dd', {}, h('a', { class: 'link', href: '/openapi.json', target: '_blank', rel: 'noopener noreferrer', text: '/openapi.json' }))),
       ),
-      h('p', { class: 'api-note', text: `${KEY_VAR} stands for the API_KEY in your server's .env. It is never sent to this page.` }),
-      h('div', { class: 'actions' }, h('button', { class: 'btn primary', text: 'Copy for AGENTS.md', onclick: () => copyText(agentsMarkdown(), 'Copied. Paste it into your AGENTS.md') }), h('a', { class: 'btn ghost', href: '/openapi.json', target: '_blank', rel: 'noopener noreferrer', text: 'Open the spec' })),
+      h('p', { class: 'api-note', text: custom?.note ?? `${KEY_VAR} stands for the API_KEY in your server's .env. It is never sent to this page.` }),
+      h('div', { class: 'actions' }, h('button', { class: 'btn primary', text: 'Copy for AGENTS.md', onclick: () => copyText(custom?.agents?.(keyVar) ?? agentsMarkdown(keyVar), 'Copied. Paste it into your AGENTS.md') }), h('a', { class: 'btn ghost', href: '/openapi.json', target: '_blank', rel: 'noopener noreferrer', text: 'Open the spec' })),
     ),
     h(
       'div',
       { class: 'feed' },
-      codeCard('Create a monitor', curl('POST', '/v1/monitors', example)),
-      codeCard('Read findings', curl('GET', `/v1/monitors/${exampleId}/runs?limit=5`)),
-      codeCard('Run now', curl('POST', `/v1/monitors/${exampleId}/run`)),
+      custom?.examples
+        ? custom.examples({ curl: (method, path, body) => curl(method, path, body, keyVar), monitors: state.monitors }).map(([title, code]) => codeCard(title, code))
+        : [
+            codeCard('Create a monitor', curl('POST', '/v1/monitors', example)),
+            codeCard('Read findings', curl('GET', `/v1/monitors/${exampleId}/runs?limit=5`)),
+            codeCard('Run now', curl('POST', `/v1/monitors/${exampleId}/run`)),
+          ],
       codeCard('Verify a webhook delivery (Node)', VERIFY_SNIPPET),
     ),
   ]
