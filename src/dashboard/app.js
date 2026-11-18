@@ -8,6 +8,7 @@ const app = document.getElementById('app')
 
 const state = {
   session: null,
+  ready: false, // true once the first screen has been drawn
   monitors: [],
   runs: {}, // monitor id -> runs, newest first
   deliveries: {}, // monitor id -> delivery attempts, newest first
@@ -1368,6 +1369,7 @@ function render() {
   else if (state.setup) screen = setupScreen()
   else screen = [strip(), dashboard()]
   app.replaceChildren(...[screen].flat(3).filter(Boolean))
+  state.ready = true
   // each page and drawer gets its own address, so reload, links and Back land in the same place
   if (state.session && !state.setup && routed && location.hash !== hashFor()) history.pushState(null, '', hashFor())
   document.dispatchEvent(new CustomEvent('om:render', { detail: { session: state.session } }))
