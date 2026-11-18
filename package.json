@@ -1,7 +1,7 @@
 {
   "name": "open-monitor",
   "version": "0.1.0",
-  "description": "Self-hosted, open-source server that speaks Perplexity's Monitor API",
+  "description": "Self-hosted web monitoring: watches searches and pages, an LLM filters the results, signed webhooks",
   "license": "MIT",
   "type": "module",
   "private": true,
