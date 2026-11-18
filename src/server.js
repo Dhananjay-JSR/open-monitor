@@ -10,8 +10,8 @@ import { tick } from './runner.js'
 import { createTelemetry } from './telemetry.js'
 import { assembleDashboard } from './dashboard/assemble.js'
 
-// Geist for the interface, Bricolage Grotesque only for the "Open Monitor" wordmark
-const FONTS = ['geist-variable.woff2', 'bricolage-grotesque-700.woff2']
+// Geist for text, Geist Mono for times, scores and urls
+const FONTS = ['geist-variable.woff2', 'geist-mono-variable.woff2']
 
 // the dashboard is one html document with its css, script and fonts inlined
 function loadDashboard() {

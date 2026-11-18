@@ -12,7 +12,7 @@ import tokensCss from './dashboard/tokens.css'
 import appCss from './dashboard/app.css'
 import script from './dashboard/app.js'
 import geistBytes from './dashboard/fonts/geist-variable.woff2'
-import bricolageBytes from './dashboard/fonts/bricolage-grotesque-700.woff2'
+import geistMonoBytes from './dashboard/fonts/geist-mono-variable.woff2'
 
 function toBase64(buffer) {
   let binary = ''
@@ -28,7 +28,7 @@ const dashboard = assembleDashboard({
   html,
   styles: { 'tokens.css': tokensCss, 'app.css': appCss },
   script,
-  fonts: { 'geist-variable.woff2': toBase64(geistBytes), 'bricolage-grotesque-700.woff2': toBase64(bricolageBytes) },
+  fonts: { 'geist-variable.woff2': toBase64(geistBytes), 'geist-mono-variable.woff2': toBase64(geistMonoBytes) },
 })
 
 function d1(database) {

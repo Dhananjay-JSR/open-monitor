@@ -590,7 +590,15 @@ function sidebar() {
       'aria-label': state.sideOpen ? 'Collapse sidebar' : 'Expand sidebar',
       'aria-expanded': String(state.sideOpen),
       title: state.sideOpen ? 'Collapse' : 'Expand',
-      onclick: () => ((state.sideOpen = !state.sideOpen), render()),
+      // flip the class on the existing layout instead of redrawing it, so the width can animate
+      onclick: (event) => {
+        state.sideOpen = !state.sideOpen
+        app.querySelector('.app').classList.toggle('collapsed', !state.sideOpen)
+        const button = event.currentTarget
+        button.setAttribute('aria-expanded', String(state.sideOpen))
+        button.setAttribute('aria-label', state.sideOpen ? 'Collapse sidebar' : 'Expand sidebar')
+        button.title = state.sideOpen ? 'Collapse' : 'Expand'
+      },
     },
     icon('panel'),
   )

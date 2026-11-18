@@ -11,7 +11,7 @@ test('the dashboard is one self-contained document', () => {
     html: read('index.html'),
     styles: { 'tokens.css': read('tokens.css'), 'app.css': read('app.css') },
     script: read('app.js'),
-    fonts: Object.fromEntries(['geist-variable.woff2', 'bricolage-grotesque-700.woff2'].map((name) => [name, readFileSync(new URL('fonts/' + name, dir)).toString('base64')])),
+    fonts: Object.fromEntries(['geist-variable.woff2', 'geist-mono-variable.woff2'].map((name) => [name, readFileSync(new URL('fonts/' + name, dir)).toString('base64')])),
   })
 
   // nothing left that would need another request (the CSP would block it anyway)

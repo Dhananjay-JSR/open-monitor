@@ -1,6 +1,6 @@
 /* Fonts are inlined as data: urls when the page is assembled (see assemble.js). Both are SIL OFL. */
 @font-face { font-family: 'Geist'; font-weight: 100 900; font-display: swap; src: url('fonts/geist-variable.woff2') format('woff2'); }
-@font-face { font-family: 'Bricolage Grotesque'; font-weight: 700; font-display: swap; src: url('fonts/bricolage-grotesque-700.woff2') format('woff2'); }
+@font-face { font-family: 'Geist Mono'; font-weight: 100 900; font-display: swap; src: url('fonts/geist-mono-variable.woff2') format('woff2'); }
 
 /* graphite neutrals, one green accent that only ever means "found something" */
 :root {
@@ -22,8 +22,7 @@
   --color-btn-text: #fafafa;
   --shadow: 0 1px 2px rgb(0 0 0 / 0.04);
   --font: 'Geist', system-ui, sans-serif;
-  --mono: ui-monospace, 'SF Mono', Menlo, monospace;
-  --brand: 'Bricolage Grotesque', 'Geist', system-ui, sans-serif;
+  --mono: 'Geist Mono', ui-monospace, 'SF Mono', Menlo, monospace;
   --ease: cubic-bezier(0.2, 0, 0, 1);
 }
 
