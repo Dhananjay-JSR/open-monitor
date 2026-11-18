@@ -1047,21 +1047,34 @@ function signInForm() {
   )
 }
 
-// the example cards drift with the pointer, up to 20px across and 12px down for the nearest one
+// The example card under the pointer slides up to 10px across and 6px down toward it.
+// The cards are inert decoration, so the pointer can't target them; their boxes are checked
+// instead, front card first where they overlap.
 function parallax(event) {
-  const deck = event.currentTarget.querySelector('.deck-cards')
-  if (!deck || event.pointerType === 'touch') return
-  const box = deck.getBoundingClientRect()
-  const x = Math.max(-1, Math.min(1, (event.clientX - box.left - box.width / 2) / box.width))
-  const y = Math.max(-1, Math.min(1, (event.clientY - box.top - box.height / 2) / box.height))
-  deck.style.setProperty('--px', `${(-x * 20) / 1.6}px`)
-  deck.style.setProperty('--py', `${(-y * 12) / 1.6}px`)
+  const cards = [...(event.currentTarget.querySelector('.deck-cards')?.children ?? [])]
+  if (event.pointerType === 'touch') return
+  const near = cards.findLast((card) => {
+    const box = card.getBoundingClientRect()
+    return event.clientX >= box.left && event.clientX <= box.right && event.clientY >= box.top && event.clientY <= box.bottom
+  })
+  for (const card of cards) {
+    let x = 0
+    let y = 0
+    if (card === near) {
+      const box = card.getBoundingClientRect()
+      x = ((event.clientX - box.left) / box.width - 0.5) * 2
+      y = ((event.clientY - box.top) / box.height - 0.5) * 2
+    }
+    card.style.setProperty('--px', `${x * 10}px`)
+    card.style.setProperty('--py', `${y * 6}px`)
+  }
 }
 
 function resetParallax(event) {
-  const deck = event.currentTarget.querySelector('.deck-cards')
-  deck?.style.setProperty('--px', '0px')
-  deck?.style.setProperty('--py', '0px')
+  for (const card of event.currentTarget.querySelectorAll('.deck-cards .card')) {
+    card.style.setProperty('--px', '0px')
+    card.style.setProperty('--py', '0px')
+  }
 }
 
 function signInScreen() {
