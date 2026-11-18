@@ -68,6 +68,8 @@ const ICONS = {
   play: [['path', { d: 'M6 3v18l15-9z' }]],
   check: [['path', { d: 'M20 6 9 17l-5-5' }]],
   close: [['path', { d: 'M18 6 6 18M6 6l12 12' }]],
+  eye: [['path', { d: 'M2.06 12.35a1 1 0 0 1 0-.7 10.75 10.75 0 0 1 19.88 0 1 1 0 0 1 0 .7 10.75 10.75 0 0 1-19.88 0' }], ['circle', { cx: 12, cy: 12, r: 3 }]],
+  eyeOff: [['path', { d: 'M10.73 5.08A10.43 10.43 0 0 1 12 5c4.53 0 8.36 2.97 9.94 7a10.8 10.8 0 0 1-1.44 2.49M14.08 14.16a3 3 0 0 1-4.24-4.24M17.48 17.5A10.75 10.75 0 0 1 2.06 12a10.8 10.8 0 0 1 4.45-5.5M2 2l20 20' }]],
   github: [['path', { d: 'M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.4 5.4 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4' }], ['path', { d: 'M9 18c-4.51 2-5-2-7-2' }]],
 }
 
@@ -866,6 +868,21 @@ function signInForm() {
   const password = h('input', { class: 'input', id: 'login-pass', type: 'password', autocomplete: 'current-password', required: true })
   const error = h('span', { class: 'form-error', id: 'login-error', role: 'alert' })
   const button = h('button', { class: 'btn primary', text: 'Sign in' })
+  // show the password as text while checking what was typed
+  const reveal = h('button', {
+    class: 'pw-reveal',
+    type: 'button',
+    'aria-label': 'Show password',
+    title: 'Show password',
+    onclick: () => {
+      const showing = password.type === 'text'
+      password.type = showing ? 'password' : 'text'
+      reveal.replaceChildren(icon(showing ? 'eye' : 'eyeOff'))
+      reveal.setAttribute('aria-label', showing ? 'Show password' : 'Hide password')
+      reveal.title = showing ? 'Show password' : 'Hide password'
+      password.focus()
+    },
+  }, icon('eye'))
 
   async function submit(event) {
     event.preventDefault()
@@ -891,7 +908,7 @@ function signInForm() {
     'form',
     { class: 'auth-body', onsubmit: submit },
     h('div', { class: 'field' }, h('label', { for: 'login-user', text: 'Username' }), username),
-    h('div', { class: 'field' }, h('label', { for: 'login-pass', text: 'Password' }), password, error),
+    h('div', { class: 'field' }, h('label', { for: 'login-pass', text: 'Password' }), h('div', { class: 'pw-wrap' }, password, reveal), error),
     button,
     h('div', { id: 'login-extra' }), // add-ons can put something here
   )

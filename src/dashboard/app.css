@@ -416,3 +416,9 @@ textarea.input { min-height: 80px; resize: vertical; }
 .auth-center .auth-body { margin: 0; padding: 0; max-width: none; }
 .repo-link { justify-self: start; display: grid; place-items: center; width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--color-line-2); color: var(--color-text-2); font-size: 13px; font-weight: 500; text-decoration: none; transition: background-color 120ms var(--ease), color 120ms var(--ease); }
 .repo-link:hover { background: var(--color-raised); color: var(--color-text); }
+
+/* the show-password button sits inside the field, on the right */
+.pw-wrap { position: relative; }
+.pw-wrap .input { padding-right: 44px; }
+.pw-reveal { position: absolute; top: 50%; right: 4px; transform: translateY(-50%); width: 32px; height: 32px; display: grid; place-items: center; border: 0; border-radius: 6px; background: transparent; color: var(--color-text-3); transition: background-color 120ms var(--ease), color 120ms var(--ease); }
+.pw-reveal:hover { background: var(--color-raised); color: var(--color-text); }
