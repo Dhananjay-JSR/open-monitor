@@ -1047,12 +1047,29 @@ function signInForm() {
   )
 }
 
+// the example cards drift with the pointer, up to 20px across and 12px down for the nearest one
+function parallax(event) {
+  const deck = event.currentTarget.querySelector('.deck-cards')
+  if (!deck || event.pointerType === 'touch') return
+  const box = deck.getBoundingClientRect()
+  const x = Math.max(-1, Math.min(1, (event.clientX - box.left - box.width / 2) / box.width))
+  const y = Math.max(-1, Math.min(1, (event.clientY - box.top - box.height / 2) / box.height))
+  deck.style.setProperty('--px', `${(-x * 20) / 1.6}px`)
+  deck.style.setProperty('--py', `${(-y * 12) / 1.6}px`)
+}
+
+function resetParallax(event) {
+  const deck = event.currentTarget.querySelector('.deck-cards')
+  deck?.style.setProperty('--px', '0px')
+  deck?.style.setProperty('--py', '0px')
+}
+
 function signInScreen() {
   return [
     strip(),
     h(
       'div',
-      { class: 'auth' },
+      { class: 'auth', onpointermove: parallax, onpointerleave: resetParallax },
       h(
         'div',
         { class: 'auth-form' },
@@ -1061,6 +1078,7 @@ function signInScreen() {
       ),
       h(
         'div',
+        // the side is inert (decoration only), so the parallax listens on the whole page
         { class: 'auth-side', 'aria-hidden': 'true', inert: true },
         h('div', { class: 'deck' }, h('div', { class: 'auth-caption' }, h('b', { text: 'This morning' }), ' · 3 findings from 41 results judged'), h('div', { class: 'deck-cards' }, SAMPLES.map((s) => findingCard(s, true)))),
       ),

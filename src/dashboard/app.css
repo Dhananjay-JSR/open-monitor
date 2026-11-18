@@ -203,9 +203,14 @@ textarea.input { min-height: 80px; resize: vertical; }
 .deck-cards .card { position: relative; padding: 16px 20px; font-size: 13px; box-shadow: 0 8px 24px rgb(0 0 0 / 0.18); }
 .deck-cards .card h3 { font-size: 14px; line-height: 20px; }
 .deck-cards .card p { font-size: 13px; }
-.deck-cards .card:nth-child(1) { z-index: 1; transform: translateX(-24px); }
-.deck-cards .card:nth-child(2) { z-index: 2; transform: translateX(24px); margin-top: -12px; }
-.deck-cards .card:nth-child(3) { z-index: 3; transform: translateX(-24px); margin-top: -12px; }
+.deck-cards .card:nth-child(1) { z-index: 1; --x: -24px; --depth: 0.5; }
+.deck-cards .card:nth-child(2) { z-index: 2; --x: 24px; --depth: 1; margin-top: -12px; }
+.deck-cards .card:nth-child(3) { z-index: 3; --x: -24px; --depth: 1.6; margin-top: -12px; }
+/* parallax: the pointer sets --px and --py on the deck, and nearer cards move further */
+.deck-cards .card { transform: translate(calc(var(--x) + var(--px, 0px) * var(--depth)), calc(var(--py, 0px) * var(--depth))); transition: transform 500ms var(--ease); }
+@media (prefers-reduced-motion: reduce) {
+  .deck-cards .card { transform: translateX(var(--x)); }
+}
 .auth-caption b { color: var(--color-text); font-weight: 500; }
 .setup { min-height: 100vh; display: flex; flex-direction: column; }
 .setup-top { display: flex; align-items: center; gap: 16px; height: 56px; padding: 0 32px; border-bottom: 1px solid var(--color-line); }
