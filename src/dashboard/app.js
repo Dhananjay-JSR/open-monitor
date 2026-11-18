@@ -1108,11 +1108,21 @@ function readSetupFields() {
 }
 
 function pickTemplate(t) {
+  const changed = t.id !== state.setup.tpl
   Object.assign(state.setup, { tpl: t.id, kind: t.kind, what: t.what, goal: t.goal, preset: t.preset })
   // the redraw reads the fields back in, so they have to hold the new template's values first
   const field = document.getElementById('s-what')
   if (field) field.value = t.what
-  render()
+  // force it: some browsers leave focus in the query field after a click, and a normal
+  // render skips while a field has focus, which would leave the art on the old kind
+  redraw()
+  if (changed) {
+    const art = document.querySelector('.art')
+    if (art) {
+      art.classList.add('swap')
+      art.addEventListener('animationend', () => art.classList.remove('swap'), { once: true })
+    }
+  }
 }
 
 async function testHook() {
