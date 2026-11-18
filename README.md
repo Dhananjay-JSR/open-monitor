@@ -1,5 +1,7 @@
 # open-monitor
 
+**Live demo:** [omon.dhananjaay.dev](https://omon.dhananjaay.dev) (sign in with `demo` / `demo`)
+
 A self-hosted server that watches web searches or specific pages on a schedule, asks an LLM whether each new result matters for your goal, and sends what it keeps to a webhook. You bring the search provider and the LLM.
 
 <picture>
