@@ -1015,7 +1015,9 @@ function signInForm() {
     password.removeAttribute('aria-invalid')
     button.setAttribute('aria-busy', 'true')
     try {
-      await api('POST', '/auth/login', { username: username.value, password: password.value })
+      const result = await api('POST', '/auth/login', { username: username.value, password: password.value })
+      // add-ons can keep something from the login response, like the demo's visitor token
+      slots.onLogin?.(result)
       await boot()
     } catch (e) {
       button.removeAttribute('aria-busy')
