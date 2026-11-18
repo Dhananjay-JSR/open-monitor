@@ -268,15 +268,6 @@ async function loadAll() {
   try {
     const list = await api('GET', '/v1/monitors?limit=100')
     state.monitors = list.data
-    await Promise.all(
-      state.monitors.map(async (monitor) => {
-        const runs = await api('GET', `/v1/monitors/${monitor.id}/runs?limit=50`)
-        state.runs[monitor.id] = runs.data
-        // the delivery log is owner-only on some setups, so a refusal is not an error here
-        const attempts = await api('GET', `/v1/monitors/${monitor.id}/deliveries?limit=50`).catch(() => ({ data: [] }))
-        state.deliveries[monitor.id] = attempts.data
-      }),
-    )
     state.loadError = null
     if (!routed) {
       applyHash()
@@ -284,11 +275,25 @@ async function loadAll() {
     }
     if (state.view !== 'all' && state.view !== 'api' && !state.monitors.some((m) => m.id === state.view)) state.view = 'all'
     if (!state.setup && setupWanted()) startSetup()
+    // the setup only needs the monitors, so draw it now and let runs and deliveries follow
+    if (state.setup) render()
+    await Promise.all(
+      state.monitors.map(async (monitor) => {
+        const [runs, attempts] = await Promise.all([
+          api('GET', `/v1/monitors/${monitor.id}/runs?limit=50`),
+          // the delivery log is owner-only on some setups, so a refusal is not an error here
+          api('GET', `/v1/monitors/${monitor.id}/deliveries?limit=50`).catch(() => ({ data: [] })),
+        ])
+        state.runs[monitor.id] = runs.data
+        state.deliveries[monitor.id] = attempts.data
+      }),
+    )
   } catch (e) {
     if (e.status === 401) state.session = null
     else state.loadError = e.message
   }
-  render()
+  // the setup was already drawn from the monitors alone
+  if (!state.setup) render()
   scheduleRefresh()
 }
 
