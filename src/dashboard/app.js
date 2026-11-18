@@ -738,7 +738,7 @@ function drawer() {
       'form',
       { onsubmit: submit },
       h('h2', { text: 'New monitor' }),
-      h('div', { class: 'seg' }, seg('search', 'Web search', 'New results for a query'), seg('page', 'Pages', 'Changes on up to 10 URLs')),
+      h('div', { class: 'seg' }, seg('search', 'Web search', 'New results for a query'), seg('page', 'Pages', 'Changes on a page')),
       h('div', { class: 'field' }, h('label', { for: 'd-what', text: d.kind === 'search' ? 'Search query' : 'Page URLs, one per line' }), what),
       h('div', { class: 'field' }, h('label', { for: 'd-goal', text: 'What counts as a finding' }), goal),
       h('div', { class: 'field' }, h('label', { text: 'How often' }), h('div', { class: 'presets' }, PRESETS.map(([id, label]) => preset(id, label)), preset('cron', 'Cron')), d.preset === 'cron' && cron),
