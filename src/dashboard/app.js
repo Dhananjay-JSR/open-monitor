@@ -586,7 +586,7 @@ function sidebar() {
   const toggle = h(
     'button',
     {
-      class: 'side-toggle',
+      class: 'icon-btn side-toggle',
       'aria-label': state.sideOpen ? 'Collapse sidebar' : 'Expand sidebar',
       'aria-expanded': String(state.sideOpen),
       title: state.sideOpen ? 'Collapse' : 'Expand',
@@ -614,11 +614,13 @@ function sidebar() {
       state.monitors.map((m) => navItem(m.id, m.name, monitorIcon(m), todayCount([m]))),
       isOwner() && h('button', { class: 'nav new-btn', title: 'New monitor', onclick: openDrawer }, h('span', { class: 'slot' }, icon('plus')), h('span', { class: 'grow', text: 'New monitor' })),
     ),
+    // the footer mirrors the header: who is signed in, and the sign-out button where the toggle sits
     h(
       'div',
       { class: 'side-foot' },
-      h('button', { class: 'nav', onclick: signOut }, h('span', { class: 'slot' }, icon('out')), h('span', { class: 'grow', text: slots.signOutLabel ?? 'Sign out' })),
-      h('small', { text: state.session.username }),
+      h('span', { class: 'slot' }, h('span', { class: 'avatar', text: (state.session.username || '?')[0].toUpperCase() })),
+      h('span', { class: 'user', text: state.session.username }),
+      h('button', { class: 'icon-btn', title: slots.signOutLabel ?? 'Sign out', 'aria-label': slots.signOutLabel ?? 'Sign out', onclick: signOut }, icon('out')),
     ),
   )
 }

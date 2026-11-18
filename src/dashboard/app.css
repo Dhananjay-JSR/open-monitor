@@ -11,7 +11,7 @@ button { cursor: pointer; }
 /* ---------- shell ---------- */
 .app { flex: 1; min-height: 0; display: grid; grid-template-columns: 256px minmax(0, 1fr); }
 .side { display: flex; flex-direction: column; padding: 16px 12px; background: var(--color-side); border-right: 1px solid var(--color-line); overflow-y: auto; }
-.brand { display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 6px 0 12px; margin-bottom: 16px; font: 600 16px/1 var(--font); letter-spacing: -0.02em; }
+.brand { display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 0 0 12px; margin-bottom: 16px; font: 600 16px/1 var(--font); letter-spacing: -0.02em; }
 .side-label { padding: 0 12px; margin: 24px 0 8px; font-size: 12px; color: var(--color-text-3); }
 .nav-list { display: grid; gap: 2px; }
 .nav { display: flex; align-items: center; gap: 10px; width: 100%; height: 32px; padding: 0 12px; border: 0; border-radius: 8px; background: transparent; text-align: left; color: var(--color-text-2); transition: background-color 120ms var(--ease), color 120ms var(--ease); }
@@ -25,9 +25,10 @@ button { cursor: pointer; }
 .dot[data-s="failing"] { background: var(--color-bad); }
 .dot[data-s="warn"] { background: transparent; box-shadow: inset 0 0 0 1.5px var(--color-text-2); }
 .dot[data-s="paused"] { background: transparent; box-shadow: inset 0 0 0 1.5px var(--color-text-3); }
-.new-btn { margin-top: 8px; color: var(--color-text-3); }
-.side-foot { margin-top: auto; padding-top: 16px; display: grid; gap: 4px; }
-.side-foot small { padding: 0 12px; font-size: 12px; color: var(--color-text-3); }
+.new-btn { margin-top: 8px; }
+.side-foot { margin-top: auto; display: flex; align-items: center; gap: 10px; height: 32px; padding-left: 12px; }
+.side-foot .user { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 13px; color: var(--color-text-2); }
+.avatar { width: 16px; height: 16px; border-radius: 50%; display: grid; place-items: center; background: var(--color-raised); box-shadow: inset 0 0 0 1px var(--color-line-2); font-size: 9px; font-weight: 600; color: var(--color-text); }
 .main { overflow-y: auto; }
 .top { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 12px; height: 56px; padding: 0 32px; background: var(--color-bg); border-bottom: 1px solid var(--color-line); }
 .top h1 { font-size: 14px; font-weight: 500; margin: 0; }
@@ -294,9 +295,12 @@ textarea.input { min-height: 80px; resize: vertical; }
 .secret { display: flex; gap: 8px; align-items: center; padding: 8px 12px; border-radius: 8px; background: var(--color-raised); font: 12px var(--mono); color: var(--color-text-2); }
 .secret span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 /* collapsible sidebar: icons only until expanded */
-.side-toggle { margin-left: auto; width: 28px; height: 28px; display: grid; place-items: center; border: 0; border-radius: 6px; background: transparent; color: var(--color-text-3); transition: background-color 120ms var(--ease), color 120ms var(--ease); }
-.side-toggle:hover { background: var(--color-raised); color: var(--color-text); }
-.kind { position: relative; }
+/* icon buttons share the rows' height and corners, and sit flush with their right edge */
+.icon-btn { flex: none; width: 32px; height: 32px; display: grid; place-items: center; border: 0; border-radius: 8px; background: transparent; color: var(--color-text-2); transition: background-color 120ms var(--ease), color 120ms var(--ease); }
+.icon-btn:hover { background: var(--color-raised); color: var(--color-text); }
+.side-toggle { margin-left: auto; }
+.kind { position: relative; display: block; width: 16px; height: 16px; }
+.kind .icon, .slot > .icon { display: block; }
 .kind .dot { position: absolute; right: -3px; bottom: -2px; outline: 2px solid var(--color-side); }
 .kind .dot[data-s="ok"] { display: none; }
 @media (min-width: 821px) {
@@ -304,21 +308,23 @@ textarea.input { min-height: 80px; resize: vertical; }
   .app { transition: grid-template-columns 240ms var(--ease); }
   .app.collapsed { grid-template-columns: 64px minmax(0, 1fr); }
   .side { overflow-x: hidden; white-space: nowrap; }
-  .brand-name, .side .nav .grow, .side .nav .n, .side-foot small, .side-label { transition: opacity 160ms var(--ease); }
+  .brand-name, .side .nav .grow, .side .nav .n, .side-foot .slot, .side-foot .user, .side-label { transition: opacity 160ms var(--ease); }
   /* the 28px toggle centred on the same axis as the icons: 12 + 6 + 14 = 32 */
-  .collapsed .brand { padding: 0 0 0 6px; gap: 0; }
+  /* the 32px buttons centred on the icons' axis: 12 + 4 + 16 = 32 */
+  .collapsed .brand, .collapsed .side-foot { padding-left: 4px; gap: 0; }
   .collapsed .side-toggle { margin-left: 0; }
+  .collapsed .side-foot .slot, .collapsed .side-foot .user { flex: 0 0 0; width: 0; overflow: hidden; }
   .collapsed .brand-name { width: 0; overflow: hidden; }
   /* hidden labels must not keep their width, or the selected item's background runs past the column */
   .collapsed .nav .grow, .collapsed .nav .n { flex: 0 0 0; width: 0; min-width: 0; padding: 0; overflow: hidden; }
   .collapsed .nav { gap: 0; }
   /* the Monitors label becomes a divider, so the icons don't sit under an empty gap */
   .collapsed .side-label { opacity: 1; height: 1px; padding: 0; margin: 16px 12px; overflow: hidden; color: transparent; background: var(--color-line); }
-  .collapsed .brand-name, .collapsed .nav .grow, .collapsed .nav .n, .collapsed .side-foot small, .collapsed .side-label { opacity: 0; pointer-events: none; }
+  .collapsed .brand-name, .collapsed .nav .grow, .collapsed .nav .n, .collapsed .side-foot .slot, .collapsed .side-foot .user, .collapsed .side-label { opacity: 0; pointer-events: none; }
   .collapsed .nav.has-new .slot::after { content: ''; position: absolute; top: -3px; right: -4px; width: 6px; height: 6px; border-radius: 50%; background: var(--color-accent-fill); outline: 2px solid var(--color-side); }
 }
 @media (min-width: 821px) and (prefers-reduced-motion: reduce) {
-  .app, .brand-name, .side .nav .grow, .side .nav .n, .side-foot small, .side-label { transition: none; }
+  .app, .brand-name, .side .nav .grow, .side .nav .n, .side-foot .slot, .side-foot .user, .side-label { transition: none; }
 }
 .slot { position: relative; }
 /* problems sit apart from the findings, one quiet line each */
