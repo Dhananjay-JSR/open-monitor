@@ -242,6 +242,10 @@ async function loadAll() {
       }),
     )
     state.loadError = null
+    if (!routed) {
+      applyHash()
+      routed = true
+    }
     if (state.view !== 'all' && !state.monitors.some((m) => m.id === state.view)) state.view = 'all'
     if (!state.setup && setupWanted()) startSetup()
   } catch (e) {
@@ -271,6 +275,33 @@ async function act(fn, done) {
   }
   await loadAll()
 }
+
+// ---- the address bar: #/ or #/monitors/<id>, plus /new or /edit while the drawer is open ----
+
+let routed = false // the hash is read once the monitors are loaded, then kept in step with the screen
+
+function hashFor() {
+  const page = state.view === 'all' ? '' : `monitors/${state.view}`
+  const open = state.drawer ? (state.drawer.edit ? 'edit' : 'new') : ''
+  return '#/' + [page, open].filter(Boolean).join('/')
+}
+
+function applyHash() {
+  const parts = location.hash.replace(/^#\/?/, '').split('/').filter(Boolean)
+  const id = parts[0] === 'monitors' ? parts[1] : null
+  const action = id ? parts[2] : parts[0]
+  const monitor = state.monitors.find((m) => m.id === id)
+  state.view = monitor ? monitor.id : 'all'
+  if (action === 'edit' && monitor && isOwner()) state.drawer = state.drawer?.edit === monitor.id ? state.drawer : drawerFor(monitor)
+  else if (action === 'new' && isOwner()) state.drawer = state.drawer && !state.drawer.edit ? state.drawer : drawerFor()
+  else state.drawer = null
+}
+
+addEventListener('popstate', () => {
+  if (!state.session || state.setup) return
+  applyHash()
+  redraw()
+})
 
 function go(view) {
   state.view = view
@@ -616,8 +647,16 @@ function monitorPage(monitor) {
     actions.push(h('button', { class: 'btn primary', disabled: running, 'aria-busy': running ? 'true' : null, onclick: call('/run') }, icon('play'), running ? 'Running' : 'Run now'))
   }
   if (isOwner()) {
+    const testWebhook = () =>
+      act(async () => {
+        const result = await api('POST', path + '/webhook/test')
+        if (!result.delivered) throw new Error(`Webhook test failed: ${result.status_code ? 'answered ' + result.status_code : result.error}`)
+        return `Webhook answered ${result.status_code} in ${result.duration_ms} ms`
+      })
     actions.push(
       monitor.status === 'active' ? h('button', { class: 'btn', text: 'Pause', onclick: call('/pause') }) : h('button', { class: 'btn', text: 'Resume', onclick: call('/resume') }),
+      h('button', { class: 'btn ghost', text: 'Edit', onclick: () => openDrawer(monitor) }),
+      monitor.webhook && h('button', { class: 'btn ghost', text: 'Test webhook', onclick: testWebhook }),
       h('span', { class: 'spacer' }),
       h('button', {
         class: 'btn ghost danger',
@@ -644,6 +683,7 @@ function monitorPage(monitor) {
         h('div', {}, h('dt', { text: kindOf(monitor) === 'search' ? 'Query' : 'Watching' }), h('dd', { text: watchingText(monitor) })),
         h('div', {}, h('dt', { text: 'Schedule' }), h('dd', { text: scheduleText(monitor.schedule) })),
         h('div', {}, h('dt', { text: 'Next run' }), h('dd', { class: 'mono', text: nextRun })),
+        isOwner() && h('div', {}, h('dt', { text: 'Webhook' }), h('dd', { text: monitor.webhook ? hostOf(monitor.webhook.url) : 'None' })),
       ),
       monitor.status === 'paused' && !monitor.pause_reason && h('div', { class: 'notice paused' }, icon('pause'), h('div', {}, h('b', { text: 'Paused' }), h('div', { class: 'why', text: 'Not running on its schedule. Resume to pick up where it left off, nothing since the pause is missed.' }))),
       actions.length > 0 && h('div', { class: 'actions' }, actions),
@@ -673,13 +713,35 @@ async function signOut() {
   boot()
 }
 
-// ---- new monitor drawer ----
+// ---- new monitor and edit monitor drawer ----
 
-function openDrawer() {
-  state.drawer = { kind: 'search', preset: '1d', error: null, typed: {} }
+// with a monitor the drawer edits it, otherwise it creates a new one
+function openDrawer(monitor) {
+  state.drawer = drawerFor(monitor)
   state.sheet = false
   render()
   setTimeout(() => document.getElementById('d-what')?.focus(), 50)
+}
+
+function drawerFor(monitor) {
+  if (monitor?.id) {
+    const { schedule } = monitor
+    return {
+      edit: monitor.id,
+      kind: kindOf(monitor),
+      preset: schedule.type === 'cron' ? 'cron' : schedule.interval,
+      hadWebhook: Boolean(monitor.webhook),
+      error: null,
+      typed: {
+        what: monitor.targets.map((t) => t.query ?? t.url).join('\n'),
+        goal: monitor.goal,
+        name: monitor.name,
+        hook: monitor.webhook?.url ?? '',
+        cron: schedule.type === 'cron' ? schedule.cron : '',
+      },
+    }
+  }
+  return { kind: 'search', preset: '1d', error: null, typed: {} }
 }
 
 function closeDrawer() {
@@ -717,12 +779,15 @@ function drawer() {
       targets: d.kind === 'search' ? [{ type: 'search', query: text }] : text.split(/\s+/).filter(Boolean).map((url) => ({ type: 'page', url })),
       schedule: d.preset === 'cron' ? { type: 'cron', cron: cron.value.trim() } : { type: 'interval', interval: d.preset },
     }
-    if (hook.value.trim()) body.webhook = { url: hook.value.trim() }
+    const url = hook.value.trim()
+    if (url) body.webhook = { url }
+    // an emptied webhook field on an existing monitor removes its webhook
+    else if (d.edit && d.hadWebhook) body.webhook = null
     try {
-      const created = await api('POST', '/v1/monitors', body)
+      const saved = d.edit ? await api('PATCH', `/v1/monitors/${d.edit}`, body) : await api('POST', '/v1/monitors', body)
       state.drawer = null
-      state.view = created.id
-      state.notice = created.webhook?.secret ? { kind: 'info', text: 'Webhook signing secret, shown only this once: ' + created.webhook.secret } : null
+      state.view = saved.id
+      state.notice = saved.webhook?.secret ? { kind: 'info', text: 'Webhook signing secret, shown only this once: ' + saved.webhook.secret } : d.edit ? { kind: 'info', text: 'Saved' } : null
       await loadAll()
     } catch (e) {
       state.drawer = { ...d, typed: typed(), error: e.message }
@@ -730,22 +795,27 @@ function drawer() {
     }
   }
 
-  const seg = (kind, title, sub) => h('button', { type: 'button', 'aria-pressed': String(d.kind === kind), onclick: redrawWith({ kind }) }, h('b', { text: title }), h('span', { text: sub }))
+  // a monitor watches either a search or pages; that is fixed once it exists
+  const seg = (kind, title, sub) => h('button', { type: 'button', 'aria-pressed': String(d.kind === kind), disabled: Boolean(d.edit) && d.kind !== kind, onclick: d.edit ? null : redrawWith({ kind }) }, h('b', { text: title }), h('span', { text: sub }))
   const preset = (id, label) => h('button', { type: 'button', 'aria-pressed': String(d.preset === id), onclick: redrawWith({ preset: id }) }, label)
+  // an existing monitor may run on an interval the presets don't list, like 6h
+  const presets = PRESETS.some(([id]) => id === d.preset) || d.preset === 'cron' ? PRESETS : [...PRESETS, [d.preset, 'Every ' + d.preset]]
+  const removeHook = d.edit && hook.value && h('button', { class: 'btn ghost danger', type: 'button', text: 'Remove', onclick: () => ((hook.value = ''), (state.drawer = { ...d, typed: typed() }), render()) })
 
+  panel.setAttribute('aria-label', d.edit ? 'Edit monitor' : 'New monitor')
   panel.append(
     h(
       'form',
       { onsubmit: submit },
-      h('h2', { text: 'New monitor' }),
+      h('h2', { text: d.edit ? 'Edit monitor' : 'New monitor' }),
       h('div', { class: 'seg' }, seg('search', 'Web search', 'New results for a query'), seg('page', 'Pages', 'Changes on a page')),
       h('div', { class: 'field' }, h('label', { for: 'd-what', text: d.kind === 'search' ? 'Search query' : 'Page URLs, one per line' }), what),
       h('div', { class: 'field' }, h('label', { for: 'd-goal', text: 'What counts as a finding' }), goal),
-      h('div', { class: 'field' }, h('label', { text: 'How often' }), h('div', { class: 'presets' }, PRESETS.map(([id, label]) => preset(id, label)), preset('cron', 'Cron')), d.preset === 'cron' && cron),
+      h('div', { class: 'field' }, h('label', { text: 'How often' }), h('div', { class: 'presets' }, presets.map(([id, label]) => preset(id, label)), preset('cron', 'Cron')), d.preset === 'cron' && cron),
       h('div', { class: 'field' }, h('label', { for: 'd-name', text: 'Name' }), name),
-      h('div', { class: 'field' }, h('label', { for: 'd-hook' }, 'Webhook URL ', h('span', { text: 'optional' })), hook, webhookHint()),
+      h('div', { class: 'field' }, h('label', { for: 'd-hook' }, 'Webhook URL ', h('span', { text: 'optional' })), removeHook ? h('div', { class: 'hook-row' }, hook, removeHook) : hook, webhookHint()),
       d.error && h('p', { class: 'form-error', role: 'alert', text: d.error }),
-      h('div', { class: 'actions drawer-actions' }, h('button', { class: 'btn primary', text: 'Create monitor' }), h('button', { class: 'btn ghost', type: 'button', text: 'Cancel', onclick: closeDrawer })),
+      h('div', { class: 'actions drawer-actions' }, h('button', { class: 'btn primary', text: d.edit ? 'Save' : 'Create monitor' }), h('button', { class: 'btn ghost', type: 'button', text: 'Cancel', onclick: closeDrawer })),
     ),
   )
   return [scrim, panel]
@@ -1104,6 +1174,8 @@ function render() {
   else if (state.setup) screen = setupScreen()
   else screen = [strip(), dashboard()]
   app.replaceChildren(...[screen].flat(3).filter(Boolean))
+  // each page and drawer gets its own address, so reload, links and Back land in the same place
+  if (state.session && !state.setup && routed && location.hash !== hashFor()) history.pushState(null, '', hashFor())
   document.dispatchEvent(new CustomEvent('om:render', { detail: { session: state.session } }))
 }
 
@@ -1118,6 +1190,7 @@ function redraw() {
 }
 
 async function boot() {
+  routed = false
   try {
     state.session = { role: 'owner', ...(await api('GET', '/auth/session')) }
   } catch {
