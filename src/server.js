@@ -10,7 +10,10 @@ import { tick } from './runner.js'
 import { createTelemetry } from './telemetry.js'
 import { assembleDashboard } from './dashboard/assemble.js'
 
-// the dashboard is one html document with its css, script and font inlined
+// Geist for the interface, Bricolage Grotesque only for the "Open Monitor" wordmark
+const FONTS = ['geist-variable.woff2', 'bricolage-grotesque-700.woff2']
+
+// the dashboard is one html document with its css, script and fonts inlined
 function loadDashboard() {
   const dir = new URL('./dashboard/', import.meta.url)
   const read = (name) => readFileSync(new URL(name, dir), 'utf8')
@@ -18,7 +21,7 @@ function loadDashboard() {
     html: read('index.html'),
     styles: { 'tokens.css': read('tokens.css'), 'app.css': read('app.css') },
     script: read('app.js'),
-    fonts: { 'geist-variable.woff2': readFileSync(new URL('fonts/geist-variable.woff2', dir)).toString('base64') },
+    fonts: Object.fromEntries(FONTS.map((name) => [name, readFileSync(new URL('fonts/' + name, dir)).toString('base64')])),
   })
 }
 
