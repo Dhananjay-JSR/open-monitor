@@ -73,7 +73,8 @@ function monitorView(m, secret) {
 //
 // An identity is { role, allow(method, action, monitor), view?(monitor), afterRun?(monitor) }.
 // `allow` says whether this caller may do the request, `view` can trim what they see of a
-// monitor, and `afterRun` is told when a manual run they asked for was actually queued.
+// monitor (or return null to hide it), and `afterRun` is told when a manual run they asked
+// for was actually queued.
 const OWNER = { role: 'owner' }
 
 // API clients send the key as a bearer token. The dashboard has no key, it rides on the
@@ -340,7 +341,7 @@ async function route(ctx, req, background) {
       const page = await store.listMonitors(ctx.db, url.searchParams.get('after'), limit)
       return json(200, {
         object: 'list',
-        data: page.data.map((m) => present(identity, m)),
+        data: page.data.map((m) => present(identity, m)).filter(Boolean),
         has_more: page.has_more,
       })
     }
@@ -356,7 +357,11 @@ async function route(ctx, req, background) {
   await requireAllowed(identity, method, action, monitor)
 
   if (action === '') {
-    if (method === 'GET') return json(200, present(identity, monitor))
+    if (method === 'GET') {
+      const view = present(identity, monitor)
+      if (!view) fail(404, 'not_found', 'Monitor not found')
+      return json(200, view)
+    }
     if (method === 'PATCH') return updateMonitor(ctx, req, monitor)
     if (method === 'DELETE') {
       await store.deleteMonitor(ctx.db, id)

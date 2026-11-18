@@ -92,3 +92,18 @@ test('dashboardExtra is appended to the page', async () => {
   const page = await app.call('GET', '/', undefined, { authorization: '' })
   assert.equal(page.body, "<html><body><main></main><script>window.addon = '$&'</script></body></html>")
 })
+
+test('a view that returns null hides the monitor from that identity', async () => {
+  const app = await makeApp()
+  app.ctx.hooks = {
+    identify: (ctx, req) => (req.headers.get('x-guest') === 'yes' ? { role: 'guest', allow: () => true, view: (m) => (m.name === 'shown' ? m : null) } : null),
+  }
+  const shown = (await app.call('POST', '/v1/monitors', searchMonitor({ name: 'shown' }))).body.id
+  const hidden = (await app.call('POST', '/v1/monitors', searchMonitor({ name: 'hidden' }))).body.id
+
+  const list = await app.call('GET', '/v1/monitors', undefined, guest)
+  assert.deepEqual(list.body.data.map((m) => m.id), [shown])
+  assert.equal((await app.call('GET', `/v1/monitors/${hidden}`, undefined, guest)).status, 404)
+  // the owner still sees both
+  assert.equal((await app.call('GET', '/v1/monitors')).body.data.length, 2)
+})

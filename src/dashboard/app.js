@@ -27,6 +27,7 @@ let refreshTimer = null
 //   lockedSetup()         a monitor id: first-run setup then follows that monitor and only the webhook can be set
 //   attachWebhook(url, m) used by "Send test" in a locked setup, resolves to { delivered, status_code, duration_ms, error, secret }
 //   signOutLabel          text for the sign-out button
+//   showNewMonitor        shows the New monitor button to non-owners too (the server still decides)
 //   api                   shows the API page to non-owners: { keyVar, note, examples({ curl, monitors }) -> [[title, code]], agents(keyVar) -> markdown }
 const slots = {}
 
@@ -629,7 +630,7 @@ function sidebar() {
       'div',
       { class: 'nav-list' },
       state.monitors.map((m) => navItem(m.id, m.name, monitorIcon(m), todayCount([m]))),
-      isOwner() && h('button', { class: 'nav new-btn', title: 'New monitor', onclick: openDrawer }, h('span', { class: 'slot' }, icon('plus')), h('span', { class: 'grow', text: 'New monitor' })),
+      (isOwner() || slots.showNewMonitor) && h('button', { class: 'nav new-btn', title: 'New monitor', onclick: openDrawer }, h('span', { class: 'slot' }, icon('plus')), h('span', { class: 'grow', text: 'New monitor' })),
     ),
     h(
       'div',
@@ -659,7 +660,7 @@ function bottomBar() {
       { class: 'bnav', 'aria-label': 'Main' },
       item('Findings', 'inbox', !onMonitor, () => go('all'), todayCount(state.monitors)),
       item('Monitors', 'list', onMonitor, () => ((state.sheet = true), render())),
-      isOwner() && item('New', 'plus', false, openDrawer),
+      (isOwner() || slots.showNewMonitor) && item('New', 'plus', false, openDrawer),
       item(slots.signOutLabel ?? 'Sign out', 'out', false, signOut),
     ),
     h('div', { class: 'sheet-scrim' + (state.sheet ? ' open' : ''), onclick: closeSheet }),
@@ -893,7 +894,6 @@ function drawerFor(monitor) {
       kind: kindOf(monitor),
       preset: schedule.type === 'cron' ? 'cron' : schedule.interval,
       hadWebhook: Boolean(monitor.webhook),
-      error: null,
       typed: {
         what: monitor.targets.map((t) => t.query ?? t.url).join('\n'),
         goal: monitor.goal,
@@ -903,7 +903,7 @@ function drawerFor(monitor) {
       },
     }
   }
-  return { kind: 'search', preset: '1d', error: null, typed: {} }
+  return { kind: 'search', preset: '1d', typed: {} }
 }
 
 function closeDrawer() {
@@ -953,8 +953,10 @@ function drawer() {
       else if (d.edit) toast('Saved')
       await loadAll()
     } catch (e) {
-      state.drawer = { ...d, typed: typed(), error: e.message }
+      // the drawer stays open with what was typed; the reason shows as a toast
+      state.drawer = { ...d, typed: typed() }
       render()
+      toast(e.message, { kind: 'error' })
     }
   }
 
@@ -977,7 +979,6 @@ function drawer() {
       h('div', { class: 'field' }, h('label', { text: 'How often' }), h('div', { class: 'presets' }, presets.map(([id, label]) => preset(id, label)), preset('cron', 'Cron')), d.preset === 'cron' && cron),
       h('div', { class: 'field' }, h('label', { for: 'd-name', text: 'Name' }), name),
       h('div', { class: 'field' }, h('label', { for: 'd-hook' }, 'Webhook URL ', h('span', { text: 'optional' })), removeHook ? h('div', { class: 'hook-row' }, hook, removeHook) : hook, webhookHint()),
-      d.error && h('p', { class: 'form-error', role: 'alert', text: d.error }),
       h('div', { class: 'actions drawer-actions' }, h('button', { class: 'btn primary', text: d.edit ? 'Save' : 'Create monitor' }), h('button', { class: 'btn ghost', type: 'button', text: 'Cancel', onclick: closeDrawer })),
     ),
   )
