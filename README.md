@@ -49,9 +49,11 @@ This starts three containers: the monitor on port 8787, [SearXNG](https://github
 ## Deploy
 
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/Dhananjay-JSR/open-monitor)
+[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/open-monitor?referralCode=kxlF5H&utm_medium=integration&utm_source=template&utm_campaign=generic)
 
 Any host that runs the `Dockerfile` works. Give it a persistent disk at `/data` (the SQLite file lives there), set the variables from [Configuration](#configuration), and set `TRUST_PROXY=1`, since these hosts sit behind a proxy that terminates HTTPS.
 
+- **Railway:** the template builds the `Dockerfile` with a volume at `/data`, generates `API_KEY` and `SESSION_SECRET`, and asks for the LLM, Tavily and dashboard values.
 - **Render:** the button reads `render.yaml`, which creates the web service with a 1 GB disk and generates `API_KEY` and `SESSION_SECRET`. Disks need a paid instance; on the free one the database is lost on every deploy and the service sleeps, so the scheduler stops too.
 
 ### Cloudflare Workers
