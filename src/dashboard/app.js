@@ -1047,7 +1047,8 @@ function signInForm() {
   )
 }
 
-// The example card under the pointer slides up to 10px across and 6px down toward it.
+// The example card under the pointer slides up to 10px across and 6px down toward it, tilts
+// up to 8 degrees, and a light follows the pointer across it.
 // The cards are inert decoration, so the pointer can't target them; their boxes are checked
 // instead, front card first where they overlap.
 function parallax(event) {
@@ -1065,16 +1066,23 @@ function parallax(event) {
       x = ((event.clientX - box.left) / box.width - 0.5) * 2
       y = ((event.clientY - box.top) / box.height - 0.5) * 2
     }
-    card.style.setProperty('--px', `${x * 10}px`)
-    card.style.setProperty('--py', `${y * 6}px`)
+    setTilt(card, x, y, card === near)
   }
 }
 
+// x and y run from -1 to 1 across the card; 0, 0 is at rest
+function setTilt(card, x, y, lit) {
+  card.style.setProperty('--px', `${x * 10}px`)
+  card.style.setProperty('--py', `${y * 6}px`)
+  card.style.setProperty('--rx', `${-y * 6}deg`)
+  card.style.setProperty('--ry', `${x * 8}deg`)
+  card.style.setProperty('--mx', `${(x + 1) * 50}%`)
+  card.style.setProperty('--my', `${(y + 1) * 50}%`)
+  card.style.setProperty('--shine', lit ? '1' : '0')
+}
+
 function resetParallax(event) {
-  for (const card of event.currentTarget.querySelectorAll('.deck-cards .card')) {
-    card.style.setProperty('--px', '0px')
-    card.style.setProperty('--py', '0px')
-  }
+  for (const card of event.currentTarget.querySelectorAll('.deck-cards .card')) setTilt(card, 0, 0, false)
 }
 
 function signInScreen() {
