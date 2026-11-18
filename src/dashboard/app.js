@@ -24,8 +24,6 @@ let refreshTimer = null
 //   strip()               text or a node, shown as a thin bar above every screen
 //   entry()               a node that replaces the sign-in form
 //   lockedSetup()         a monitor id: first-run setup then follows that monitor and only the webhook can be set
-//   setupChoices()        [{ id, enabled }]: monitors a locked setup may follow; enabled ones can be picked
-//   pickSetup(id)         called when a locked setup picks another monitor
 //   attachWebhook(url, m) used by "Send test" in a locked setup, resolves to { delivered, status_code, duration_ms, error, secret }
 //   signOutLabel          text for the sign-out button
 //   api                   shows the API page to non-owners: { keyVar, note, examples({ curl, monitors }) -> [[title, code]], agents(keyVar) -> markdown }
@@ -1128,22 +1126,6 @@ function pickTemplate(t) {
   if (changed) swapArt()
 }
 
-// a locked setup can follow another of the add-on's monitors, when the add-on allows it
-function pickLocked(id) {
-  const monitor = state.monitors.find((m) => m.id === id)
-  if (!monitor) return
-  Object.assign(state.setup, {
-    locked: monitor,
-    kind: kindOf(monitor),
-    what: monitor.targets.map((t) => t.query ?? t.url).join('\n'),
-    goal: monitor.goal,
-    preset: monitor.schedule.interval ?? null,
-  })
-  slots.pickSetup?.(id)
-  redraw()
-  swapArt()
-}
-
 async function testHook() {
   readSetupFields()
   const s = state.setup
@@ -1305,27 +1287,17 @@ function setupScreen() {
   let form
 
   if (st === 1) {
-    // a locked setup shows the monitor being followed in place of the first example.
-    // an add-on can offer other monitors to follow, and say which of them may be picked.
-    const choices = locked ? slots.setupChoices?.() : null
-    const cards = locked
-      ? choices
-        ? choices
-            .map((c) => {
-              const m = state.monitors.find((x) => x.id === c.id)
-              return m ? { id: m.id, name: m.name, blurb: scheduleText(m.schedule), kind: kindOf(m), enabled: c.enabled !== false } : null
-            })
-            .filter(Boolean)
-        : [{ id: 'locked', name: s.locked.name, blurb: scheduleText(s.locked.schedule), kind: s.kind, enabled: false }, ...TEMPLATES.slice(1).map((t) => ({ ...t, enabled: false }))]
-      : TEMPLATES.map((t) => ({ ...t, enabled: true }))
-    const selected = locked ? (choices ? s.locked.id : 'locked') : s.tpl
+    // a locked setup shows the same four templates as the main app, with the one that
+    // matches the monitor being followed selected
+    const cards = TEMPLATES.map((t) => ({ ...t, enabled: !locked }))
+    const selected = locked ? (TEMPLATES.find((t) => t.kind === s.kind) ?? TEMPLATES[0]).id : s.tpl
     const whatField =
       s.kind === 'page' && !locked
         ? h('textarea', { class: 'input', id: 's-what', placeholder: 'https://', text: s.what })
         : h('input', { class: 'input', id: 's-what', value: s.what, readonly: locked, placeholder: s.kind === 'search' ? 'What would you type into a search box' : 'https://' })
     form = [
       h('h1', { text: 'What should it watch first' }),
-      h('div', { class: 'tpls' }, cards.map((t) => h('button', { class: 'tpl', type: 'button', 'aria-pressed': String(t.id === selected), disabled: !t.enabled, onclick: t.enabled ? (locked ? () => pickLocked(t.id) : () => pickTemplate(t)) : null }, h('b', { text: t.name }), h('span', { text: t.blurb }), h('span', { class: 'mono', text: t.kind === 'search' ? 'Web search' : 'Page' })))),
+      h('div', { class: 'tpls' }, cards.map((t) => h('button', { class: 'tpl', type: 'button', 'aria-pressed': String(t.id === selected), disabled: !t.enabled, onclick: t.enabled ? () => pickTemplate(t) : null }, h('b', { text: t.name }), h('span', { text: t.blurb }), h('span', { class: 'mono', text: t.kind === 'search' ? 'Web search' : 'Page' })))),
       h('div', { class: 'field' }, h('label', { for: 's-what', text: s.kind === 'search' ? 'Search query' : 'Page URL' }), whatField),
       h('div', { class: 'setup-actions' }, h('button', { class: 'btn primary', text: 'Continue', onclick: () => goSetupStep(2) }), h('button', { class: 'btn ghost', text: 'Skip to dashboard', onclick: () => finishSetup() })),
     ]
