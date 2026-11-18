@@ -352,7 +352,6 @@ textarea.input { min-height: 80px; resize: vertical; }
 .notice { align-items: flex-start; margin-bottom: 16px; }
 .notice.paused { margin-bottom: 24px; }
 .notice code { font-family: var(--mono); font-size: 12px; }
-.secret-text { overflow-wrap: anywhere; }
 .drawer-actions { margin-top: 24px; }
 .runlog .bad .pip { background: var(--color-bad); }
 .runlog .bad { color: var(--color-bad); }
@@ -374,4 +373,24 @@ textarea.input { min-height: 80px; resize: vertical; }
 
 @media (max-width: 820px) {
   .fc-head { flex-wrap: wrap; }
+}
+
+/* toasts rise from the bottom right; on phones they sit above the bottom bar */
+.toasts { position: fixed; right: 24px; bottom: 24px; z-index: 40; display: grid; gap: 8px; justify-items: end; width: min(420px, calc(100vw - 32px)); pointer-events: none; }
+.toast { pointer-events: auto; display: flex; align-items: flex-start; gap: 10px; width: 100%; padding: 12px 12px 12px 16px; border-radius: 12px; background: var(--color-raised); border: 1px solid var(--color-line-2); box-shadow: 0 12px 32px rgb(0 0 0 / 0.28); font-size: 13px; color: var(--color-text); animation: toast-in 240ms var(--ease); }
+.toast > .icon { margin-top: 2px; color: var(--color-accent); }
+.toast.bad > .icon { color: var(--color-bad); }
+.toast-body { flex: 1; min-width: 0; display: grid; gap: 6px; padding-top: 1px; }
+.toast-body code { font: 12px var(--mono); color: var(--color-text-2); overflow-wrap: anywhere; }
+.toast .btn { height: 28px; }
+.toast-x { width: 28px; height: 28px; flex: none; display: grid; place-items: center; border: 0; border-radius: 6px; background: transparent; color: var(--color-text-3); }
+.toast-x:hover { background: var(--color-line); color: var(--color-text); }
+.toast.out { animation: toast-out 200ms var(--ease) forwards; }
+@keyframes toast-in { from { opacity: 0; transform: translateY(12px); } }
+@keyframes toast-out { to { opacity: 0; transform: translateY(8px); } }
+@media (max-width: 820px) {
+  .toasts { right: 16px; bottom: calc(80px + env(safe-area-inset-bottom, 0px)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .toast, .toast.out { animation: none; }
 }

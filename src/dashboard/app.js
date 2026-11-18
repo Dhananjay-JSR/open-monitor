@@ -14,7 +14,6 @@ const state = {
   sideOpen: false,
   drawer: null, // the new monitor form: { kind, preset, error, typed }
   sheet: false, // phones: the monitor list raised from the bottom bar
-  notice: null, // { kind, text }
   loadError: null,
   setup: null, // first-run setup, see setupScreen()
 }
@@ -68,6 +67,7 @@ const ICONS = {
   pause: [['circle', { cx: 12, cy: 12, r: 10 }], ['path', { d: 'M10 15V9M14 15V9' }]],
   play: [['path', { d: 'M6 3v18l15-9z' }]],
   check: [['path', { d: 'M20 6 9 17l-5-5' }]],
+  close: [['path', { d: 'M18 6 6 18M6 6l12 12' }]],
 }
 
 function icon(name) {
@@ -144,6 +144,34 @@ const PRESETS = [['15m', 'Every 15 min'], ['1h', 'Hourly'], ['1d', 'Daily'], ['1
 function scheduleText(schedule) {
   if (schedule.type === 'interval') return PRESETS.find(([id]) => id === schedule.interval)?.[1] ?? 'Every ' + schedule.interval
   return `${schedule.cron} (${schedule.timezone})`
+}
+
+// ---- toasts: short notes that rise from the bottom right ----
+
+const toasts = h('div', { class: 'toasts' })
+document.body.append(toasts)
+
+function toast(text, { kind = 'info', secret } = {}) {
+  const close = () => {
+    el.classList.add('out')
+    setTimeout(() => el.remove(), 200)
+  }
+  const copy = (event) =>
+    navigator.clipboard
+      ?.writeText(secret)
+      .then(() => (event.target.textContent = 'Copied'))
+      .catch(() => {})
+  const el = h(
+    'div',
+    { class: 'toast' + (kind === 'error' ? ' bad' : ''), role: kind === 'error' ? 'alert' : 'status' },
+    icon(kind === 'error' ? 'x' : 'check'),
+    h('div', { class: 'toast-body' }, h('div', { text }), secret && h('code', { text: secret })),
+    secret && h('button', { class: 'btn ghost', type: 'button', text: 'Copy', onclick: copy }),
+    h('button', { class: 'toast-x', type: 'button', 'aria-label': 'Dismiss', onclick: close }, icon('close')),
+  )
+  toasts.append(el)
+  // a signing secret can't be shown again, so that one stays until it is closed
+  if (!secret) setTimeout(close, kind === 'error' ? 8000 : 4000)
 }
 
 // ---- what the data says ----
@@ -266,12 +294,11 @@ function scheduleRefresh() {
 
 // runs an action, then reloads. `fn` may return a message to show, otherwise `done` is used.
 async function act(fn, done) {
-  state.notice = null
   try {
     const message = (await fn()) ?? done
-    if (typeof message === 'string') state.notice = { kind: 'info', text: message }
+    if (typeof message === 'string') toast(message)
   } catch (e) {
-    state.notice = { kind: 'error', text: e.message }
+    toast(e.message, { kind: 'error' })
   }
   await loadAll()
 }
@@ -620,17 +647,6 @@ function banners() {
     )
   }
   if (state.loadError) out.push(h('div', { class: 'notice bad', role: 'alert' }, icon('x'), h('div', {}, h('b', { text: 'Could not load' }), h('div', { class: 'why', text: state.loadError }))))
-  if (state.notice) {
-    out.push(
-      h(
-        'div',
-        { class: 'notice' + (state.notice.kind === 'error' ? ' bad' : ''), role: 'status' },
-        icon(state.notice.kind === 'error' ? 'x' : 'check'),
-        h('div', { class: 'grow' }, h('div', { class: 'why secret-text', text: state.notice.text })),
-        h('button', { class: 'btn ghost', text: 'Dismiss', onclick: () => ((state.notice = null), render()) }),
-      ),
-    )
-  }
   return out
 }
 
@@ -787,7 +803,8 @@ function drawer() {
       const saved = d.edit ? await api('PATCH', `/v1/monitors/${d.edit}`, body) : await api('POST', '/v1/monitors', body)
       state.drawer = null
       state.view = saved.id
-      state.notice = saved.webhook?.secret ? { kind: 'info', text: 'Webhook signing secret, shown only this once: ' + saved.webhook.secret } : d.edit ? { kind: 'info', text: 'Saved' } : null
+      if (saved.webhook?.secret) toast('Webhook signing secret. It is shown only this once', { secret: saved.webhook.secret })
+      else if (d.edit) toast('Saved')
       await loadAll()
     } catch (e) {
       state.drawer = { ...d, typed: typed(), error: e.message }
@@ -984,7 +1001,7 @@ async function runFirstCheck() {
       logLine('Creating the monitor')
       monitor = await api('POST', '/v1/monitors', body)
       s.monitorId = monitor.id
-      if (monitor.webhook?.secret) state.notice = { kind: 'info', text: 'Webhook signing secret, shown only this once: ' + monitor.webhook.secret }
+      if (monitor.webhook?.secret) toast('Webhook signing secret. It is shown only this once', { secret: monitor.webhook.secret })
       logLine(`Created “${monitor.name}”`, 'done')
       if (body.webhook) {
         const r = await api('POST', `/v1/monitors/${monitor.id}/webhook/test`)
@@ -1210,5 +1227,5 @@ document.addEventListener('keydown', (e) => {
 })
 
 // add-ons hook in through this object and the "om:render" event
-window.openMonitor = { state, slots, api, h, svg, icon, signInForm, render: redraw, reload: loadAll, boot }
+window.openMonitor = { state, slots, api, h, svg, icon, toast, signInForm, render: redraw, reload: loadAll, boot }
 boot()
