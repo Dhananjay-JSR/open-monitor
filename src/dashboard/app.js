@@ -542,9 +542,13 @@ function findingsChart(monitors) {
 }
 
 function runStrip(monitor) {
-  const runs = (state.runs[monitor.id] ?? []).filter(finished).slice(0, 30).reverse()
-  const kindOfRun = (run) => (run.status === 'failed' ? 'fail' : run.counts.changes ? 'found' : 'none')
-  const label = { found: 'Found something', none: 'Nothing new', fail: 'Failed' }
+  const all = state.runs[monitor.id] ?? []
+  const runs = all.filter(finished).slice(0, 30).reverse()
+  // a page monitor's very first run only saves the page to compare against later.
+  // The list holds the newest 50 runs, so with fewer than that its oldest run is the first one.
+  const firstRun = kindOf(monitor) === 'page' && all.length < 50 ? all.at(-1) : null
+  const kindOfRun = (run) => (run.status === 'failed' ? 'fail' : run.counts.changes ? 'found' : run === firstRun ? 'base' : 'none')
+  const label = { found: 'Found something', none: 'Nothing new', base: 'Baseline saved', fail: 'Failed' }
   const found = runs.filter((r) => kindOfRun(r) === 'found').length
   const failed = runs.filter((r) => kindOfRun(r) === 'fail').length
   return h(
@@ -618,6 +622,7 @@ function sidebar() {
       state.monitors.map((m) => navItem(m.id, m.name, monitorIcon(m), todayCount([m]))),
       isOwner() && h('button', { class: 'nav new-btn', title: 'New monitor', onclick: openDrawer }, h('span', { class: 'slot' }, icon('plus')), h('span', { class: 'grow', text: 'New monitor' })),
     ),
+    h('a', { class: 'nav repo-nav', href: REPO_URL, target: '_blank', rel: 'noopener noreferrer', title: 'GitHub' }, h('span', { class: 'slot' }, icon('github')), h('span', { class: 'grow', text: 'GitHub' })),
     // the footer mirrors the header: who is signed in, and the sign-out button where the toggle sits
     h(
       'div',
