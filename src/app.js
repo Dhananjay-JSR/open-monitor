@@ -279,6 +279,18 @@ async function testWebhook(ctx, monitor) {
   return json(200, { object: 'monitor.webhook_test', event_id: event.id, ...result })
 }
 
+// The address clients use to reach this server. Behind a trusted proxy (TRUST_PROXY) that is
+// what X-Forwarded-Proto and X-Forwarded-Host say, since the proxy may talk plain http to us.
+// Without TRUST_PROXY those headers are ignored: anyone could send them.
+function publicOrigin(env, req, url) {
+  if (!env.TRUST_PROXY) return url.origin
+  const first = (name) => req.headers.get(name)?.split(',')[0].trim()
+  const proto = first('x-forwarded-proto')
+  const host = first('x-forwarded-host')
+  const scheme = proto === 'https' || proto === 'http' ? proto : url.protocol.slice(0, -1)
+  return `${scheme}://${host && /^[a-z0-9.-]+(:\d+)?$/i.test(host) ? host : url.host}`
+}
+
 async function route(ctx, req, background) {
   const url = new URL(req.url)
   const path = url.pathname.replace(/\/+$/, '')
@@ -287,7 +299,7 @@ async function route(ctx, req, background) {
   if (path === '/health') return json(200, { ok: true })
   // the API description is public, so tools and agents can read it before they have a key
   if (path === '/openapi.json' && method === 'GET') {
-    return new Response(JSON.stringify(openapi(url.origin)), {
+    return new Response(JSON.stringify(openapi(publicOrigin(ctx.env, req, url))), {
       headers: { 'content-type': 'application/json', 'access-control-allow-origin': '*' },
     })
   }

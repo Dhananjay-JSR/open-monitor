@@ -109,7 +109,7 @@ Everything is an environment variable. `.env.example` lists them all.
 | `DASHBOARD_USER`, `DASHBOARD_PASSWORD`, `SESSION_SECRET` | Turn the dashboard on (all three are needed) |
 | `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_HEADERS`, `OTEL_SERVICE_NAME` | Telemetry export |
 | `ALLOW_PRIVATE_URLS` | Allow webhook and page URLs on localhost and private networks |
-| `TRUST_PROXY` | Read the client IP from `X-Forwarded-For` (set it when behind a reverse proxy) |
+| `TRUST_PROXY` | Behind a reverse proxy: read the client IP from `X-Forwarded-For`, and the public scheme and host from `X-Forwarded-Proto` and `X-Forwarded-Host` |
 | `COST_PER_SEARCH_RUN`, `COST_PER_PAGE_FETCH` | Rates for the `usage.cost` field. Default 0 |
 | `PORT`, `DB_PATH` | Default `8787` and `monitor.db` |
 

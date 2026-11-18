@@ -46,3 +46,15 @@ test('every $ref in the spec points at something', async () => {
     assert.ok(path.reduce((node, key) => node?.[key], spec), `${ref} does not resolve`)
   }
 })
+
+test('behind a trusted proxy the spec names the public https address', async () => {
+  const forwarded = { authorization: '', 'x-forwarded-proto': 'https', 'x-forwarded-host': 'monitor.example.com' }
+  const direct = await makeApp()
+  assert.equal((await direct.call('GET', '/openapi.json', undefined, forwarded)).body.servers[0].url, 'http://monitor.test')
+
+  const proxied = await makeApp({ TRUST_PROXY: '1' })
+  assert.equal((await proxied.call('GET', '/openapi.json', undefined, forwarded)).body.servers[0].url, 'https://monitor.example.com')
+  // a junk host header is ignored
+  const junk = await proxied.call('GET', '/openapi.json', undefined, { ...forwarded, 'x-forwarded-host': 'evil.com/<script>' })
+  assert.equal(junk.body.servers[0].url, 'https://monitor.test')
+})
