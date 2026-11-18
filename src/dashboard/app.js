@@ -1090,7 +1090,10 @@ function startSetup() {
   if (lockedId && !locked) return
   const base = { step: 1, hook: '', test: null, shown: 0, log: [], done: false, failed: false }
   if (locked) {
-    state.setup = { ...base, locked, kind: kindOf(locked), what: locked.targets.map((t) => t.query ?? t.url).join('\n'), goal: locked.goal, preset: locked.schedule.interval ?? null }
+    const what = locked.targets.map((t) => t.query ?? t.url).join('\n')
+    // show the same goal and schedule as the template the monitor was built from
+    const tpl = TEMPLATES.find((t) => t.kind === kindOf(locked) && (t.what === what || t.goal === locked.goal))
+    state.setup = { ...base, locked, kind: kindOf(locked), what, goal: tpl?.goal ?? locked.goal, preset: tpl?.preset ?? locked.schedule.interval ?? null }
   } else {
     const t = TEMPLATES[0]
     state.setup = { ...base, tpl: t.id, kind: t.kind, what: t.what, goal: t.goal, preset: t.preset }
